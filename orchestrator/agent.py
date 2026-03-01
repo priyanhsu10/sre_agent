@@ -17,6 +17,15 @@ from models.tool_result import ToolResult, ToolName
 from classifier.engine import ClassificationEngine
 from config import settings
 
+# LLM-enhanced classifier (optional)
+try:
+    from classifier.llm_classifier import LLMEnhancedClassifier
+    from llm.client import LLMConfig, LLMProvider
+    LLM_AVAILABLE = True
+except ImportError:
+    LLM_AVAILABLE = False
+    logger.warning("LLM modules not available. Using pattern-only classification.")
+
 # Reasoning and report components
 from reasoning.engine import ReasoningEngine
 from reasoning.synthesis import SynthesisEngine
@@ -55,7 +64,22 @@ class AgentOrchestrator:
             investigation_id: Unique ID for this investigation
         """
         self.investigation_id = investigation_id
-        self.classifier = ClassificationEngine()
+
+        # Initialize classifier (LLM-enhanced if enabled)
+        if settings.LLM_ENABLED and LLM_AVAILABLE and settings.LLM_API_KEY:
+            logger.info("LLM-enhanced classification enabled")
+            llm_config = LLMConfig(
+                provider=LLMProvider(settings.LLM_PROVIDER),
+                api_key=settings.LLM_API_KEY,
+                model=settings.LLM_MODEL,
+                max_tokens=settings.LLM_MAX_TOKENS,
+                temperature=settings.LLM_TEMPERATURE,
+                timeout=settings.LLM_TIMEOUT
+            )
+            self.classifier = LLMEnhancedClassifier(llm_config)
+        else:
+            logger.info("Using pattern-only classification")
+            self.classifier = ClassificationEngine()
 
         # Investigation state
         self.investigation_trace: List[InvestigationStep] = []

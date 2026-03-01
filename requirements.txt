@@ -22,3 +22,6 @@ structlog==24.1.0
 
 # Type checking (dev)
 mypy==1.8.0
+
+# LLM Integration (optional)
+anthropic==0.18.1  # Claude API
