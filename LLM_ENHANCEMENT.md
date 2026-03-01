@@ -327,19 +327,98 @@ python demo_llm.py
 
 ---
 
+## 📝 LLM Synthesis (NEW!)
+
+**Status: ✅ IMPLEMENTED**
+
+The SRE Agent now uses LLM for intelligent root cause synthesis, correlating evidence from logs, git, and Jira into actionable narratives.
+
+### How It Works
+
+```
+Evidence Collection → LLM Synthesis → Root Cause
+(Loki + Git + Jira)   (Context-aware)  (Natural language)
+```
+
+**Key Features:**
+- ✅ **Used at ANY confidence level** (not just low confidence)
+- ✅ **Context-aware correlation** of multiple evidence sources
+- ✅ **Natural language explanations** for stakeholders
+- ✅ **Fallback to rule-based** if LLM fails
+- ✅ **Automatic in orchestrator** when LLM is enabled
+
+### Example: Rule-Based vs LLM Synthesis
+
+**Rule-Based Output:**
+```
+Root cause identified as db_connectivity. Log analysis found 47 error
+occurrences. Git analysis identified 3 recent code change(s) that may
+have introduced this issue.
+```
+
+**LLM-Enhanced Output:**
+```
+Root cause identified as db_connectivity. The database connection pool
+was recently increased from 50 to 100 connections (commit abc123), but
+the pool is now exhausted with all 100 connections in use. This suggests
+the pool size increase was insufficient for current traffic levels, or a
+connection leak was introduced. Key evidence: Connection pool exhaustion
+errors; Recent pool configuration change (INFRA-123); Slow query detected
+(2500ms). The timing correlation between the deployment and error spike
+strongly indicates the configuration change triggered this issue.
+```
+
+### Configuration
+
+**No additional configuration needed!** If `LLM_ENABLED=true`, synthesis automatically uses LLM.
+
+Relevant settings:
+```bash
+LLM_ENABLED=true           # Enables BOTH classification and synthesis
+LLM_PROVIDER=anthropic     # Provider for all LLM calls
+LLM_API_KEY=sk-ant-xxx     # Same key used for all features
+```
+
+### Cost Impact
+
+**Per Investigation:**
+- Classification: ~$0.01 (if pattern confidence < 40%)
+- Synthesis: ~$0.01 (always, when LLM enabled)
+- **Total: ~$0.02** per complete investigation
+
+**Why synthesis always uses LLM (even at high confidence):**
+- Better evidence correlation
+- Actionable narratives for stakeholders
+- Natural language explanations
+- Worth the $0.01 cost for quality improvement
+
+### Demo
+
+Run the synthesis demo:
+```bash
+python demo_llm_synthesis.py
+```
+
+This shows:
+1. Rule-based vs LLM synthesis comparison
+2. Evidence correlation examples
+3. High-confidence scenario (>70%)
+
+---
+
 ## 📝 Future Enhancements
 
 Planned LLM integrations:
 
-### Phase 2: LLM Reasoning
+### Phase 2: LLM Reasoning ⏳
 - Use LLM to decide which tools to call
 - Smarter investigation path selection
 
-### Phase 3: LLM Synthesis
-- Use LLM to write root cause narratives
-- Better evidence correlation
+### Phase 3: LLM Synthesis ✅
+- ✅ Use LLM to write root cause narratives (DONE)
+- ✅ Better evidence correlation (DONE)
 
-### Phase 4: LLM Fix Generation
+### Phase 4: LLM Fix Generation ⏳
 - Context-aware fix recommendations
 - Learning from past incidents
 

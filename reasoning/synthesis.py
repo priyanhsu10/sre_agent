@@ -30,7 +30,7 @@ class SynthesisEngine:
     - Ruled-out categories → Evidence showing why other categories don't apply
     """
 
-    def synthesize_root_cause(
+    async def synthesize_root_cause(
         self,
         classification: ClassificationResult,
         tool_results: Dict[str, ToolResult]

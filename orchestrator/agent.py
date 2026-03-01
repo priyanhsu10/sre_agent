@@ -29,6 +29,7 @@ except ImportError:
 # Reasoning and report components
 from reasoning.engine import ReasoningEngine
 from reasoning.synthesis import SynthesisEngine
+from reasoning.llm_synthesis import LLMSynthesisEngine
 from report.generator import ReportGenerator
 from report.fixes import PossibleFixesGenerator
 
@@ -66,6 +67,7 @@ class AgentOrchestrator:
         self.investigation_id = investigation_id
 
         # Initialize classifier (LLM-enhanced if enabled)
+        llm_config = None
         if settings.LLM_ENABLED and LLM_AVAILABLE and settings.LLM_API_KEY:
             logger.info("LLM-enhanced classification enabled")
             llm_config = LLMConfig(
@@ -96,7 +98,15 @@ class AgentOrchestrator:
 
         # Initialize reasoning and reporting components
         self.reasoning_engine = ReasoningEngine(settings)
-        self.synthesis_engine = SynthesisEngine()
+
+        # Initialize synthesis engine (LLM-enhanced if enabled)
+        if llm_config:
+            logger.info("LLM-enhanced synthesis enabled")
+            self.synthesis_engine = LLMSynthesisEngine(llm_config)
+        else:
+            logger.info("Using rule-based synthesis")
+            self.synthesis_engine = SynthesisEngine()
+
         self.fixes_generator = PossibleFixesGenerator()
         self.report_generator = ReportGenerator(settings)
 
@@ -227,12 +237,13 @@ class AgentOrchestrator:
             # STEP 3: SYNTHESIS & REPORT GENERATION
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             # Synthesize evidence and generate final report
+            # Uses LLM for intelligent synthesis if enabled
 
             logger.info(f"[{self.investigation_id}] STEP 3: Synthesizing evidence...")
 
-            # Synthesize root cause from all evidence
+            # Synthesize root cause from all evidence (LLM-enhanced if enabled)
             root_cause, category, confidence_level, is_code_change = \
-                self.synthesis_engine.synthesize_root_cause(
+                await self.synthesis_engine.synthesize_root_cause(
                     classification=self.classification_result,
                     tool_results=self.tool_results
                 )

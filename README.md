@@ -5,6 +5,7 @@ An autonomous pipeline that receives production alerts, classifies failures, inv
 ## 🎯 Features
 
 - **🤖 LLM-Enhanced Classification** (NEW): Hybrid AI + rule-based analysis for 90% accuracy on novel errors
+- **🧠 LLM-Enhanced Synthesis** (NEW): AI-powered root cause analysis with intelligent evidence correlation
 - **Intelligent Classification**: Categorizes failures into 8 types (DB, DNS, Cert, Network, Code, Config, Dependency, Memory)
 - **Think-First Protocol**: Always classifies before investigating (prevents wasted tool calls)
 - **Infra-First Checking**: Prioritizes infrastructure checks before code blame
@@ -12,7 +13,7 @@ An autonomous pipeline that receives production alerts, classifies failures, inv
 - **Null-Safe**: Handles missing correlation IDs with intelligent fallback
 - **Circuit Breakers**: Gracefully handles tool failures
 - **Comprehensive Reports**: Generates JSON + Markdown RCA reports with full investigation trace
-- **Cost-Optimized AI**: Uses free patterns for 80% of alerts, LLM only when needed (~$0.01/alert)
+- **Cost-Optimized AI**: Uses free patterns for 80% of alerts, LLM for synthesis and novel classifications (~$0.02/alert)
 
 ## 📊 Architecture
 
@@ -252,13 +253,14 @@ Generates two formats:
 
 ## 🤖 LLM Enhancement (Optional)
 
-The SRE Agent now supports **AI-powered intelligent analysis**!
+The SRE Agent now supports **AI-powered intelligent analysis** for both classification AND synthesis!
 
 ### Hybrid Intelligence
 
 - **Pattern Matching** (Fast, Free): Handles 80% of known errors
-- **LLM Fallback** (Intelligent): Handles 20% of novel/complex errors
-- **Cost-Optimized**: Only uses LLM when pattern confidence < 40%
+- **LLM Classification** (Intelligent): Handles 20% of novel/complex errors when confidence < 40%
+- **LLM Synthesis** (Context-Aware): ALWAYS used for root cause analysis when enabled
+- **Cost-Optimized**: ~$0.02 per complete investigation
 
 ### Setup
 
@@ -276,8 +278,9 @@ The SRE Agent now supports **AI-powered intelligent analysis**!
 ### Benefits
 
 - 📈 90% accuracy on novel errors (vs 40% pattern-only)
-- 💰 ~$2 per 1,000 alerts (80% free, 20% LLM)
-- 🎯 Context-aware reasoning
+- 🧠 Context-aware root cause synthesis with intelligent evidence correlation
+- 💰 ~$20 per 1,000 alerts (80% free classification, 100% LLM synthesis when enabled)
+- 🎯 Natural language explanations for stakeholders
 - ✅ Zero breaking changes (works without LLM)
 
 ---
