@@ -154,8 +154,8 @@ async def run_investigation(investigation_id: str, alert: AlertPayload) -> None:
             f"(confidence: {report.confidence_level.value})"
         )
 
-        # TODO (Phase 5): Save report to disk via Riley's ReportGenerator
-        logger.info(f"[{investigation_id}] Report would be saved to {report.report_id}.json")
+        # Report is saved to DB by ReportGenerator.generate() inside orchestrator.investigate()
+        logger.info(f"[{investigation_id}] Report {report.report_id} saved to database")
 
     except Exception as e:
         logger.error(

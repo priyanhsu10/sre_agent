@@ -39,6 +39,12 @@ class ReportDatabaseService:
         """
         session = get_session(self.engine)
         try:
+            # Skip if already saved (idempotent)
+            existing = session.query(Investigation).filter_by(id=report.report_id).first()
+            if existing:
+                logger.warning(f"Report {report.report_id} already in database, skipping save")
+                return True
+
             # Create investigation record
             investigation = Investigation(
                 id=report.report_id,
