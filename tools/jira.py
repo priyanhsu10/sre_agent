@@ -184,7 +184,8 @@ class JiraTicketGetter(BaseTool):
                 async with session.get(
                     url,
                     headers=self.headers,
-                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                    timeout=aiohttp.ClientTimeout(total=self.timeout),
+                    ssl=False
                 ) as response:
                     if response.status == 404:
                         logger.warning(f"Jira ticket {jira_key} not found")
@@ -253,7 +254,8 @@ class JiraTicketGetter(BaseTool):
                     url,
                     headers=self.headers,
                     params=params,
-                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                    timeout=aiohttp.ClientTimeout(total=self.timeout),
+                    ssl=False
                 ) as response:
                     if response.status != 200:
                         logger.error(f"Jira JQL search error: {response.status}")
@@ -354,7 +356,8 @@ class JiraTicketGetter(BaseTool):
                 async with session.get(
                     url,
                     headers=self.headers,
-                    timeout=aiohttp.ClientTimeout(total=5)
+                    timeout=aiohttp.ClientTimeout(total=5),
+                    ssl=False
                 ) as response:
                     return response.status == 200
         except Exception:

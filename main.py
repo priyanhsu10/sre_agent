@@ -10,6 +10,8 @@ import logging
 import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 
 from api.webhook import router as webhook_router
 from api.dashboard import router as dashboard_router
@@ -63,9 +65,18 @@ app.add_middleware(
 app.include_router(webhook_router)
 app.include_router(dashboard_router)
 
+# Serve static report files (HTML, JSON, MD)
+app.mount("/static", StaticFiles(directory="reports"), name="static")
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ROOT ENDPOINT
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@app.get("/dashboard-ui", tags=["dashboard"], include_in_schema=False)
+async def dashboard_ui():
+    """Redirect to the interactive dashboard HTML"""
+    return RedirectResponse(url="/static/dashboard.html")
+
 
 @app.get("/", tags=["root"])
 async def root():
@@ -77,6 +88,7 @@ async def root():
         "endpoints": {
             "webhook": "/webhook/alert (POST)",
             "health": "/webhook/health (GET)",
+            "dashboard_ui": "/dashboard-ui (GET)",
             "dashboard_stats": "/dashboard/stats (GET)",
             "dashboard_reports": "/dashboard/reports (GET)",
             "docs": "/docs",

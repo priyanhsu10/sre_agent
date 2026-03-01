@@ -21,7 +21,8 @@ class LLMProvider(str, Enum):
     """Supported LLM providers"""
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
-    MOCK = "mock"  # For testing without API
+    MOCK = "mock"       # For testing without API
+    CUSTOM = "custom"   # Internal / self-hosted model (OpenAI-compatible endpoint)
 
 
 class LLMConfig(BaseModel):
@@ -32,6 +33,8 @@ class LLMConfig(BaseModel):
     max_tokens: int = 2048
     temperature: float = 0.0  # Deterministic for production
     timeout: int = 30
+    # Custom / internal provider fields
+    base_url: Optional[str] = None  # e.g. http://internal-llm.company.com/v1
 
 
 class LLMResponse(BaseModel):
@@ -79,6 +82,8 @@ class LLMClient:
             return await self._anthropic_complete(prompt, system_prompt, response_format)
         elif self.provider == LLMProvider.OPENAI:
             return await self._openai_complete(prompt, system_prompt, response_format)
+        elif self.provider == LLMProvider.CUSTOM:
+            return await self._custom_complete(prompt, system_prompt, response_format)
         elif self.provider == LLMProvider.MOCK:
             return await self._mock_complete(prompt, system_prompt)
         else:
@@ -125,7 +130,8 @@ class LLMClient:
                     url,
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=self.config.timeout)
+                    timeout=aiohttp.ClientTimeout(total=self.config.timeout),
+                    ssl=False
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -187,7 +193,8 @@ class LLMClient:
                     url,
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=self.config.timeout)
+                    timeout=aiohttp.ClientTimeout(total=self.config.timeout),
+                    ssl=False
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -211,6 +218,89 @@ class LLMClient:
             raise
         except Exception as e:
             logger.error(f"OpenAI API error: {e}", exc_info=True)
+            raise
+
+    async def _custom_complete(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        response_format: Optional[str]
+    ) -> LLMResponse:
+        """
+        Call a custom / internal self-hosted model via an OpenAI-compatible
+        chat completions endpoint.
+
+        Requires LLMConfig.base_url to be set, e.g.:
+            http://internal-llm.company.com/v1
+
+        The endpoint called is: {base_url}/chat/completions
+        Authentication: Bearer token (LLMConfig.api_key).
+        """
+        if not self.config.base_url:
+            raise ValueError(
+                "LLM_BASE_URL must be set when using provider 'custom'. "
+                "Example: http://internal-llm.company.com/v1"
+            )
+
+        url = self.config.base_url.rstrip("/") + "/chat/completions"
+
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        messages: List[Dict[str, Any]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload: Dict[str, Any] = {
+            "model": self.config.model,
+            "messages": messages,
+            "max_tokens": self.config.max_tokens,
+            "temperature": self.config.temperature,
+        }
+
+        # Request JSON output if needed (same as OpenAI)
+        if response_format == "json":
+            payload["response_format"] = {"type": "json_object"}
+
+        logger.debug(f"Custom LLM request → {url}  model={self.config.model}")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=self.config.timeout),
+                    ssl=False
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise Exception(
+                            f"Custom LLM API error {response.status}: {error_text}"
+                        )
+
+                    data = await response.json()
+
+                    # OpenAI-compatible response shape
+                    content = data["choices"][0]["message"]["content"]
+                    usage = data.get("usage", {})
+
+                    return LLMResponse(
+                        content=content,
+                        provider="custom",
+                        model=self.config.model,
+                        tokens_used=usage.get("completion_tokens"),
+                        finish_reason=data["choices"][0].get("finish_reason")
+                    )
+
+        except aiohttp.ClientError as e:
+            logger.error(f"Custom LLM connection error ({url}): {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Custom LLM error: {e}", exc_info=True)
             raise
 
     async def _mock_complete(

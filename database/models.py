@@ -30,9 +30,14 @@ class Investigation(Base):
 
     # Classification results
     root_cause_category = Column(String, nullable=False, index=True)
+    root_cause = Column(Text)                      # human-readable root cause description
     confidence_level = Column(String, nullable=False)
     confidence_percentage = Column(Float)
     is_code_change = Column(Boolean, default=False, index=True)
+
+    # Remediation & ruled-out (stored as JSON)
+    possible_fixes = Column(JSON)          # List[{priority, action, rationale, estimated_impact}]
+    ruled_out_categories = Column(JSON)    # List[{category, reason, evidence}]
 
     # Status
     status = Column(String, default='completed', index=True)  # pending, in_progress, completed, failed

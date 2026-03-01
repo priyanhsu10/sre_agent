@@ -4,665 +4,1458 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SRE Agent Dashboard - RCA Reports</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
             min-height: 100vh;
-            padding: 20px;
+            color: #e2e8f0;
         }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        header {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-bottom: 30px;
-        }
-
-        h1 {
-            color: #2d3748;
-            font-size: 2em;
-            margin-bottom: 10px;
-        }
-
-        .subtitle {
-            color: #718096;
-            font-size: 1.1em;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .stat-card h3 {
-            color: #718096;
-            font-size: 0.9em;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-        }
-
-        .stat-value {
-            font-size: 2.5em;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .filters {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-        }
-
-        .filters h3 {
-            margin-bottom: 15px;
-            color: #2d3748;
-        }
-
-        .filter-controls {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-
-        .filter-group {
+        /* ── Sidebar ── */
+        .sidebar {
+            position: fixed;
+            left: 0; top: 0; bottom: 0;
+            width: 220px;
+            background: #1e293b;
+            border-right: 1px solid #334155;
             display: flex;
             flex-direction: column;
+            padding: 24px 0;
+            z-index: 100;
         }
-
-        .filter-group label {
-            margin-bottom: 5px;
-            color: #4a5568;
-            font-size: 0.9em;
+        .sidebar-logo {
+            padding: 0 20px 24px;
+            border-bottom: 1px solid #334155;
+            font-size: 1.1em;
+            font-weight: 700;
+            color: #818cf8;
         }
-
-        .filter-group select,
-        .filter-group input {
-            padding: 10px;
-            border: 1px solid #cbd5e0;
-            border-radius: 5px;
-            font-size: 1em;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #5568d3;
-        }
-
-        .btn-secondary {
-            background: #48bb78;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #38a169;
-        }
-
-        .reports-section {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .reports-section h2 {
-            color: #2d3748;
-            margin-bottom: 20px;
-        }
-
-        .report-item {
-            border: 1px solid #e2e8f0;
+        .sidebar-logo span { color: #e2e8f0; }
+        .sidebar-nav { padding: 16px 12px; flex: 1; }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
             border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 15px;
             cursor: pointer;
-            transition: all 0.3s;
+            color: #94a3b8;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+        }
+        .nav-item:hover, .nav-item.active {
+            background: #334155;
+            color: #e2e8f0;
+        }
+        .nav-item.active { color: #818cf8; }
+        .refresh-info {
+            padding: 16px 20px;
+            border-top: 1px solid #334155;
+            font-size: 0.8em;
+            color: #64748b;
+        }
+        .refresh-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            background: #22c55e;
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
         }
 
-        .report-item:hover {
-            border-color: #667eea;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        /* ── Main ── */
+        .main {
+            margin-left: 220px;
+            padding: 28px 32px;
+            min-height: 100vh;
         }
 
-        .report-header {
+        /* ── Top bar ── */
+        .topbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 28px;
+        }
+        .topbar h1 {
+            font-size: 1.6em;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+        .topbar-actions { display: flex; gap: 10px; align-items: center; }
+        .countdown {
+            font-size: 0.8em;
+            color: #64748b;
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 6px 12px;
+            border-radius: 6px;
         }
 
-        .report-title {
-            font-size: 1.2em;
-            font-weight: 600;
-            color: #2d3748;
-        }
-
-        .severity-badge {
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 600;
-        }
-
-        .severity-critical {
-            background: #fed7d7;
-            color: #c53030;
-        }
-
-        .severity-high {
-            background: #feebc8;
-            color: #c05621;
-        }
-
-        .severity-medium {
-            background: #fefcbf;
-            color: #975a16;
-        }
-
-        .report-meta {
+        /* ── Stat cards ── */
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
-            margin-bottom: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .stat-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--accent, #818cf8);
+        }
+        .stat-label {
+            font-size: 0.75em;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .stat-value {
+            font-size: 2.2em;
+            font-weight: 700;
+            color: #f1f5f9;
+            line-height: 1;
+        }
+        .stat-sub {
+            font-size: 0.8em;
+            color: #64748b;
+            margin-top: 6px;
         }
 
-        .meta-item {
+        /* ── Charts row ── */
+        .charts-row {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .chart-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .chart-card h3 {
+            font-size: 0.85em;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+        }
+        .chart-canvas-wrap {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* ── Filters ── */
+        .filters-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .filters-card h3 {
+            font-size: 0.85em;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 14px;
+        }
+        .filter-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-end;
+        }
+        .filter-group { display: flex; flex-direction: column; gap: 5px; }
+        .filter-group label { font-size: 0.8em; color: #64748b; }
+        .filter-group select,
+        .filter-group input {
+            padding: 8px 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 0.9em;
+            min-width: 160px;
+        }
+        .filter-group select:focus,
+        .filter-group input:focus {
+            outline: none;
+            border-color: #818cf8;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #818cf8; color: #fff; }
+        .btn-primary:hover { background: #6366f1; }
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid #334155;
+            color: #94a3b8;
+        }
+        .btn-ghost:hover { border-color: #818cf8; color: #818cf8; }
+
+        /* ── Search ── */
+        .search-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .search-row input {
+            flex: 1;
+            padding: 10px 14px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 0.95em;
+        }
+        .search-row input:focus {
+            outline: none;
+            border-color: #818cf8;
+        }
+
+        /* ── Reports table ── */
+        .reports-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .reports-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 20px;
+            border-bottom: 1px solid #334155;
+        }
+        .reports-header h2 { font-size: 1em; font-weight: 600; color: #f1f5f9; }
+        .report-count { font-size: 0.8em; color: #64748b; }
+
+        .report-item {
+            padding: 18px 20px;
+            border-bottom: 1px solid #1e293b;
+            background: #0f172a;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+            align-items: center;
+        }
+        .report-item:last-child { border-bottom: none; }
+        .report-item:hover { background: #1a2744; }
+
+        .report-main { display: flex; flex-direction: column; gap: 6px; }
+        .report-title-row {
             display: flex;
             align-items: center;
-            font-size: 0.9em;
-            color: #4a5568;
+            gap: 10px;
         }
-
-        .meta-label {
+        .report-app {
             font-weight: 600;
-            margin-right: 5px;
+            color: #f1f5f9;
+            font-size: 1em;
         }
-
-        .category-badge {
-            background: #e6fffa;
-            color: #234e52;
-            padding: 3px 10px;
-            border-radius: 12px;
-            font-size: 0.85em;
+        .report-id {
+            font-family: 'Courier New', monospace;
+            font-size: 0.75em;
+            color: #475569;
         }
+        .report-meta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            font-size: 0.8em;
+            color: #64748b;
+        }
+        .report-meta-row span strong { color: #94a3b8; }
 
+        .confidence-bar-wrap { margin-top: 6px; }
         .confidence-bar {
-            width: 100%;
-            height: 6px;
-            background: #e2e8f0;
-            border-radius: 3px;
+            height: 4px;
+            background: #1e293b;
+            border-radius: 2px;
             overflow: hidden;
-            margin-top: 10px;
+            width: 200px;
         }
-
         .confidence-fill {
             height: 100%;
-            background: #48bb78;
+            background: linear-gradient(90deg, #818cf8, #22c55e);
+            border-radius: 2px;
             transition: width 0.5s;
         }
 
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #718096;
+        /* ── Badges ── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.72em;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+        .badge-critical { background: rgba(239,68,68,0.15); color: #f87171; }
+        .badge-high { background: rgba(249,115,22,0.15); color: #fb923c; }
+        .badge-medium { background: rgba(234,179,8,0.15); color: #facc15; }
+        .badge-low { background: rgba(34,197,94,0.15); color: #4ade80; }
+        .badge-env-prod { background: rgba(239,68,68,0.1); color: #f87171; }
+        .badge-env-staging { background: rgba(34,197,94,0.1); color: #4ade80; }
+        .badge-category {
+            background: rgba(129,140,248,0.15);
+            color: #a5b4fc;
         }
 
-        .error {
-            background: #fed7d7;
-            color: #c53030;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-
+        /* ── Pagination ── */
         .pagination {
             display: flex;
             justify-content: center;
             align-items: center;
             gap: 10px;
-            margin-top: 20px;
+            padding: 16px;
+            border-top: 1px solid #334155;
         }
+        .page-info { font-size: 0.85em; color: #64748b; }
 
-        .breakdown-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .breakdown-item {
-            background: #f7fafc;
-            padding: 10px;
-            border-radius: 5px;
+        /* ── Loading / empty ── */
+        .loading, .empty-state {
             text-align: center;
+            padding: 48px 20px;
+            color: #475569;
+        }
+        .empty-state h3 { color: #64748b; margin-bottom: 8px; }
+        .error-msg {
+            background: rgba(239,68,68,0.1);
+            border: 1px solid rgba(239,68,68,0.3);
+            color: #f87171;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
         }
 
-        .breakdown-label {
-            font-size: 0.85em;
-            color: #718096;
-            margin-bottom: 5px;
+        /* ── Modal overlay ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+            overflow-y: auto;
+            padding: 32px 20px;
+        }
+        .modal-overlay.open { display: block; }
+        .modal {
+            background: #fff;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #2d3748;
+            line-height: 1.6;
         }
 
-        .breakdown-value {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #667eea;
+        /* Modal header — gradient like complete-demo */
+        .modal-hdr {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 32px 40px;
         }
+        .modal-hdr h2 { font-size: 1.8em; margin-bottom: 6px; }
+        .modal-hdr .mhdr-sub { opacity: 0.85; font-size: 0.95em; }
+        .modal-hdr .mhdr-id { font-family: monospace; font-size: 0.8em; opacity: 0.7; margin-top: 6px; }
+        .modal-hdr-row { display: flex; justify-content: space-between; align-items: flex-start; }
+        .modal-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 1.3em;
+            border-radius: 6px;
+            padding: 4px 10px;
+            line-height: 1;
+        }
+        .modal-close:hover { background: rgba(255,255,255,0.3); }
 
-        .search-box {
+        /* Modal body */
+        .modal-body { padding: 32px 40px; background: #fff; }
+
+        /* Section */
+        .ms { margin-bottom: 36px; }
+        .ms-title {
+            font-size: 1.4em;
+            color: #2d3748;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 3px solid #667eea;
             display: flex;
-            gap: 10px;
+            align-items: center;
+            gap: 12px;
+        }
+        .ms-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #667eea;
+            color: white;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 0.9em;
+            flex-shrink: 0;
+        }
+
+        /* Alert box */
+        .m-alert {
+            background: #fff5f5;
+            border-left: 4px solid #c53030;
+            padding: 20px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+        }
+        .m-alert h4 { color: #c53030; margin-bottom: 12px; font-size: 1.05em; }
+        .m-alert-table { width: 100%; border-collapse: collapse; background: white; border-radius: 4px; overflow: hidden; margin-bottom: 14px; }
+        .m-alert-table td { padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 0.9em; }
+        .m-alert-table td:first-child, .m-alert-table td:nth-child(3) { font-weight: 600; color: #4a5568; width: 120px; }
+        .m-err-list { margin: 10px 0 0 16px; }
+        .m-err-list li { font-family: monospace; font-size: 0.85em; color: #c53030; margin-bottom: 6px; background: white; padding: 8px 12px; border-radius: 4px; list-style: decimal; }
+
+        /* mbadges */
+        .mbadge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+            margin-right: 6px;
+        }
+        .mbadge-critical { background: #fff5f5; color: #c53030; border: 1px solid #feb2b2; }
+        .mbadge-high { background: #fffaf0; color: #c05621; border: 1px solid #fbd38d; }
+        .mbadge-medium { background: #fffff0; color: #975a16; border: 1px solid #faf089; }
+        .mbadge-prod { background: #fff5f5; color: #c53030; border: 1px solid #feb2b2; }
+        .mbadge-staging { background: #f0fff4; color: #276749; border: 1px solid #9ae6b4; }
+        .mbadge-confirmed { background: #f0fff4; color: #276749; border: 1px solid #9ae6b4; }
+        .mbadge-high-conf { background: #ebf8ff; color: #2c5282; border: 1px solid #90cdf4; }
+        .mbadge-warn { background: #fffaf0; color: #c05621; border: 1px solid #fbd38d; }
+        .mbadge-info { background: #ebf8ff; color: #2c5282; border: 1px solid #90cdf4; }
+        .mbadge-code { background: #fff5f5; color: #c53030; border: 1px solid #feb2b2; }
+        .mbadge-cat { background: #f0f4ff; color: #3730a3; border: 1px solid #c7d2fe; }
+
+        /* Classification grid */
+        .class-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .class-panel {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .class-panel h4 { font-size: 0.9em; color: #4a5568; margin-bottom: 12px; font-weight: 600; }
+        .hyp-row { margin-bottom: 10px; }
+        .hyp-row-label { display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 4px; }
+        .hyp-row-label span:first-child { color: #2d3748; font-weight: 500; }
+        .hyp-row-label span:last-child { color: #718096; }
+        .hyp-bar-outer { height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; }
+        .hyp-bar-inner { height: 100%; border-radius: 5px; transition: width 0.5s; }
+        .hyp-bar-low { background: #fbd38d; }
+        .hyp-bar-mid { background: #f6ad55; }
+        .hyp-bar-high { background: #68d391; }
+        .class-result {
+            background: #f0fff4;
+            border: 1px solid #9ae6b4;
+            border-radius: 6px;
+            padding: 14px;
+            margin-top: 16px;
+            font-size: 0.9em;
+            color: #276749;
+        }
+
+        /* Evidence cards (Loki / Git / Jira) */
+        .evidence-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 22px;
             margin-bottom: 20px;
         }
-
-        .search-box input {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #cbd5e0;
-            border-radius: 5px;
+        .evidence-card h4 {
+            color: #667eea;
             font-size: 1em;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
+        .ev-meta { font-size: 0.85em; color: #718096; margin-bottom: 12px; }
 
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #718096;
+        /* Code block */
+        .code-blk {
+            background: #1a202c;
+            color: #68d391;
+            padding: 16px 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.82em;
+            overflow-x: auto;
+            margin: 12px 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.5;
         }
+        .code-blk .hl { color: #fbd38d; }
+        .code-blk .cm { color: #718096; }
 
-        .empty-state h3 {
-            margin-bottom: 10px;
-            color: #4a5568;
+        /* Metrics table */
+        .m-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.88em; }
+        .m-table th { background: #667eea; color: white; padding: 10px 12px; text-align: left; }
+        .m-table td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
+        .m-table tr:hover td { background: #f7fafc; }
+
+        /* Timeline (git commits) */
+        .timeline { position: relative; padding-left: 36px; margin: 12px 0; }
+        .timeline::before { content:''; position:absolute; left:12px; top:0; bottom:0; width:3px; background:#667eea; border-radius:2px; }
+        .tl-item { position:relative; background:#f7fafc; border-radius:8px; padding:16px; margin-bottom:16px; }
+        .tl-item::before { content:''; position:absolute; left:-30px; top:18px; width:14px; height:14px; border-radius:50%; background:#667eea; border:3px solid white; box-shadow:0 0 0 2px #667eea; }
+        .tl-item strong { font-size:0.95em; color:#2d3748; }
+        .tl-meta { margin: 8px 0; display:flex; flex-wrap:wrap; gap:6px; }
+        .tl-msg { font-size:0.9em; color:#4a5568; margin: 6px 0; }
+        .tl-files { font-size:0.82em; color:#718096; font-family:monospace; }
+        .tl-warn { background:#fffaf0; border-left:3px solid #ed8936; padding:10px; border-radius:4px; margin-top:10px; font-size:0.85em; color:#7b341e; }
+
+        /* Jira card */
+        .jira-card { background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%); border-radius:8px; padding:20px; }
+        .jira-card h4 { color:#2c5282; font-size:1em; margin-bottom:10px; }
+        .jira-table { width:100%; background:white; border-radius:4px; margin:12px 0; font-size:0.88em; }
+        .jira-table td { padding:8px 12px; }
+        .jira-table td:first-child { font-weight:600; color:#4a5568; }
+        .ac-list { list-style:none; background:white; padding:12px; border-radius:4px; margin:8px 0; }
+        .ac-list li { padding:6px 8px; font-size:0.88em; display:flex; align-items:center; gap:8px; border-bottom:1px solid #e2e8f0; }
+        .ac-list li:last-child { border-bottom:none; }
+
+        /* Person cards */
+        .person-card {
+            background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%);
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .person-avatar {
+            width: 52px; height: 52px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2em; font-weight: 700; color: white;
+            flex-shrink: 0;
+            text-transform: uppercase;
+        }
+        .person-info h4 { color: #2c5282; margin-bottom: 4px; font-size: 0.95em; }
+        .person-info p { font-size: 0.85em; color: #4a5568; }
+        .person-info ul { margin: 8px 0 0 16px; font-size: 0.85em; color: #4a5568; }
+        .person-warn { color: #c53030; font-size: 0.82em; margin-top: 6px; }
+
+        /* Action plan */
+        .action-item {
+            border-left: 4px solid #28a745;
+            background: #f0fff4;
+            padding: 18px 20px;
+            border-radius: 4px;
+            margin-bottom: 14px;
+        }
+        .action-item.p1 { border-color: #c53030; background: #fff5f5; }
+        .action-item.p2 { border-color: #ed8936; background: #fffaf0; }
+        .action-item.p3 { border-color: #38a169; background: #f0fff4; }
+        .action-item.p4 { border-color: #667eea; background: #f0f4ff; }
+        .p-badge {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 0.78em;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .p1 .p-badge { background: #c53030; color: white; }
+        .p2 .p-badge { background: #ed8936; color: white; }
+        .p3 .p-badge { background: #38a169; color: white; }
+        .p4 .p-badge { background: #667eea; color: white; }
+        .action-item h4 { margin: 6px 0 8px; font-size: 0.95em; }
+        .action-item .rationale { font-size: 0.85em; color: #4a5568; }
+        .action-item .impact { font-size: 0.82em; color: #718096; margin-top: 4px; }
+
+        /* Ruled out table */
+        .ruled-table { width:100%; border-collapse:collapse; font-size:0.88em; }
+        .ruled-table th { background:#667eea; color:white; padding:10px 12px; text-align:left; }
+        .ruled-table td { padding:10px 12px; border-bottom:1px solid #e2e8f0; vertical-align:top; }
+        .ruled-table tr:hover td { background:#f7fafc; }
+
+        /* Root cause summary box */
+        .rc-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 22px 28px;
+            border-radius: 8px;
+        }
+        .rc-box h4 { font-size: 1em; margin-bottom: 8px; opacity: 0.9; }
+        .rc-box p { font-size: 1em; line-height: 1.6; }
+
+        /* Modal footer links */
+        .modal-foot {
+            background: #2d3748;
+            color: white;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-foot a {
+            color: #a0aec0;
+            text-decoration: none;
+            font-size: 0.85em;
+            margin-right: 20px;
+        }
+        .modal-foot a:hover { color: white; }
+        .modal-foot-left { font-size: 0.85em; opacity: 0.7; }
+
+        .no-data { color: #718096; font-size: 0.9em; font-style: italic; padding: 8px 0; }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .main { margin-left: 0; padding: 16px; }
+            .charts-row { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🤖 SRE Agent Dashboard</h1>
-            <p class="subtitle">Smart Root Cause Analysis Reports</p>
-        </header>
 
-        <div class="stats-grid" id="statsGrid">
-            <div class="loading">Loading statistics...</div>
+<!-- Sidebar -->
+<div class="sidebar">
+    <div class="sidebar-logo">SRE <span>Agent</span></div>
+    <nav class="sidebar-nav">
+        <div class="nav-item active">
+            <span>📊</span> Dashboard
         </div>
-
-        <div class="filters">
-            <h3>Filters</h3>
-            <div class="filter-controls">
-                <div class="filter-group">
-                    <label>Application</label>
-                    <select id="filterApp">
-                        <option value="">All Applications</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Severity</label>
-                    <select id="filterSeverity">
-                        <option value="">All Severities</option>
-                        <option value="critical">Critical</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Environment</label>
-                    <select id="filterEnvironment">
-                        <option value="">All Environments</option>
-                        <option value="prod">Production</option>
-                        <option value="staging">Staging</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Category</label>
-                    <select id="filterCategory">
-                        <option value="">All Categories</option>
-                        <option value="db_connectivity">DB Connectivity</option>
-                        <option value="network">Network</option>
-                        <option value="code_logic_error">Code Logic Error</option>
-                        <option value="resource_exhaustion">Resource Exhaustion</option>
-                        <option value="third_party_api">Third Party API</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Last N Days</label>
-                    <select id="filterDays">
-                        <option value="">All Time</option>
-                        <option value="1">Last 24 hours</option>
-                        <option value="7">Last 7 days</option>
-                        <option value="30">Last 30 days</option>
-                    </select>
-                </div>
-            </div>
-            <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <button class="btn btn-primary" onclick="applyFilters()">Apply Filters</button>
-                <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
-            </div>
+        <div class="nav-item" onclick="window.open('/docs','_blank')">
+            <span>📖</span> API Docs
         </div>
+        <div class="nav-item" onclick="window.open('/health','_blank')">
+            <span>❤️</span> Health
+        </div>
+    </nav>
+    <div class="refresh-info">
+        <span class="refresh-dot"></span>Live · <span id="countdown">30</span>s
+    </div>
+</div>
 
-        <div class="reports-section">
-            <h2>Recent Investigations</h2>
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="Search by error message...">
-                <button class="btn btn-primary" onclick="searchReports()">Search</button>
-            </div>
-            <div id="reportsContainer">
-                <div class="loading">Loading reports...</div>
-            </div>
-            <div class="pagination" id="pagination"></div>
+<!-- Main content -->
+<div class="main">
+    <div class="topbar">
+        <h1>RCA Investigation Dashboard</h1>
+        <div class="topbar-actions">
+            <span class="countdown" id="lastRefreshed">Last refreshed: just now</span>
+            <button class="btn btn-primary" onclick="refreshAll()">↻ Refresh</button>
         </div>
     </div>
 
-    <script>
-        const API_BASE = 'http://localhost:8000';
-        let currentPage = 0;
-        const pageSize = 10;
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card"><div class="loading">…</div></div>
+    </div>
 
-        // Load dashboard on page load
-        window.onload = () => {
-            loadStatistics();
-            loadApps();
-            loadReports();
-        };
+    <!-- Charts -->
+    <div class="charts-row">
+        <div class="chart-card">
+            <h3>Severity Split</h3>
+            <div class="chart-canvas-wrap">
+                <canvas id="severityChart" width="200" height="200"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <h3>Root Cause Categories</h3>
+            <canvas id="categoryChart" height="200"></canvas>
+        </div>
+    </div>
 
-        async function loadStatistics() {
-            try {
-                const response = await fetch(`${API_BASE}/dashboard/stats`);
-                const stats = await response.json();
-                renderStatistics(stats);
-            } catch (error) {
-                console.error('Failed to load statistics:', error);
-                document.getElementById('statsGrid').innerHTML =
-                    '<div class="error">Failed to load statistics. Make sure the API is running.</div>';
+    <!-- Filters -->
+    <div class="filters-card">
+        <h3>Filters</h3>
+        <div class="filter-controls">
+            <div class="filter-group">
+                <label>Application</label>
+                <select id="filterApp">
+                    <option value="">All Applications</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Severity</label>
+                <select id="filterSeverity">
+                    <option value="">All</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Environment</label>
+                <select id="filterEnvironment">
+                    <option value="">All</option>
+                    <option value="prod">Production</option>
+                    <option value="staging">Staging</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Category</label>
+                <select id="filterCategory">
+                    <option value="">All</option>
+                    <option value="db_connectivity">DB Connectivity</option>
+                    <option value="network">Network</option>
+                    <option value="dns_failure">DNS Failure</option>
+                    <option value="code_logic_error">Code Logic Error</option>
+                    <option value="resource_exhaustion">Resource Exhaustion</option>
+                    <option value="memory_resource_exhaustion">Memory Exhaustion</option>
+                    <option value="third_party_api">Third Party API</option>
+                    <option value="config_drift">Config Drift</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Time Range</label>
+                <select id="filterDays">
+                    <option value="">All Time</option>
+                    <option value="1">Last 24 hours</option>
+                    <option value="7">Last 7 days</option>
+                    <option value="30">Last 30 days</option>
+                </select>
+            </div>
+            <div class="filter-group" style="justify-content: flex-end;">
+                <label>&nbsp;</label>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-primary" onclick="applyFilters()">Apply</button>
+                    <button class="btn btn-ghost" onclick="resetFilters()">Reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reports -->
+    <div class="reports-card">
+        <div class="reports-header">
+            <h2>Recent Investigations</h2>
+            <span class="report-count" id="reportCount"></span>
+        </div>
+        <div style="padding: 16px 20px 0;">
+            <div class="search-row">
+                <input type="text" id="searchInput" placeholder="Search by error message (min 3 chars)…"
+                       onkeydown="if(event.key==='Enter') searchReports()">
+                <button class="btn btn-primary" onclick="searchReports()">Search</button>
+                <button class="btn btn-ghost" onclick="clearSearch()">Clear</button>
+            </div>
+        </div>
+        <div id="reportsContainer">
+            <div class="loading">Loading reports…</div>
+        </div>
+        <div class="pagination" id="pagination"></div>
+    </div>
+</div>
+
+<!-- Report Detail Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOnOverlay(event)">
+    <div class="modal" id="modalContent">
+        <div class="modal-hdr" id="modalHdr">
+            <div class="modal-hdr-row">
+                <div>
+                    <h2 id="modalTitle">Loading…</h2>
+                    <div class="mhdr-sub" id="modalSub"></div>
+                    <div class="mhdr-id" id="modalSubtitle"></div>
+                </div>
+                <button class="modal-close" onclick="closeModal()" title="Close">✕</button>
+            </div>
+        </div>
+        <div class="modal-body" id="modalBody">
+            <div class="loading" style="color:#718096;padding:40px;text-align:center;">Loading investigation details…</div>
+        </div>
+        <div class="modal-foot" id="modalFoot" style="display:none">
+            <span class="modal-foot-left">Powered by SRE Agent · Claude Sonnet 4.6</span>
+            <div id="modalFootLinks"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API = '';  // same origin when served via FastAPI
+let currentPage = 0;
+const PAGE_SIZE = 10;
+let totalReports = 0;
+let sevChart = null;
+let catChart = null;
+let countdownVal = 30;
+let countdownTimer = null;
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────
+
+window.onload = () => {
+    loadStatistics();
+    loadApps();
+    loadReports();
+    startCountdown();
+};
+
+function startCountdown() {
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownVal = 30;
+    document.getElementById('countdown').textContent = countdownVal;
+    countdownTimer = setInterval(() => {
+        countdownVal--;
+        document.getElementById('countdown').textContent = countdownVal;
+        if (countdownVal <= 0) {
+            refreshAll();
+        }
+    }, 1000);
+}
+
+function refreshAll() {
+    loadStatistics();
+    applyFilters();
+    const now = new Date();
+    document.getElementById('lastRefreshed').textContent =
+        `Last refreshed: ${now.toLocaleTimeString()}`;
+    startCountdown();
+}
+
+// ── Statistics ─────────────────────────────────────────────────────────────
+
+async function loadStatistics() {
+    try {
+        const r = await fetch(`${API}/dashboard/stats`);
+        const stats = await r.json();
+        renderStats(stats);
+        renderCharts(stats);
+    } catch (e) {
+        document.getElementById('statsGrid').innerHTML =
+            '<div class="error-msg">Failed to load statistics — is the API running?</div>';
+    }
+}
+
+function renderStats(s) {
+    const sevBreakdown = Object.entries(s.severity_breakdown || {})
+        .map(([k, v]) => `${k}: <strong>${v}</strong>`).join(' · ') || '—';
+
+    const topApp = (s.top_apps || [])[0];
+
+    document.getElementById('statsGrid').innerHTML = `
+        <div class="stat-card" style="--accent:#818cf8">
+            <div class="stat-label">Total Investigations</div>
+            <div class="stat-value">${s.total_investigations || 0}</div>
+            <div class="stat-sub">${sevBreakdown}</div>
+        </div>
+        <div class="stat-card" style="--accent:#22c55e">
+            <div class="stat-label">Code Changes Involved</div>
+            <div class="stat-value">${s.code_changes_involved || 0}</div>
+            <div class="stat-sub">deploy-related incidents</div>
+        </div>
+        <div class="stat-card" style="--accent:#f59e0b">
+            <div class="stat-label">Last 24 Hours</div>
+            <div class="stat-value">${s.recent_24h || 0}</div>
+            <div class="stat-sub">new investigations</div>
+        </div>
+        <div class="stat-card" style="--accent:#06b6d4">
+            <div class="stat-label">Top App</div>
+            <div class="stat-value" style="font-size:1.3em">${topApp ? topApp.app : '—'}</div>
+            <div class="stat-sub">${topApp ? topApp.count + ' incidents' : 'no data'}</div>
+        </div>
+        <div class="stat-card" style="--accent:#a855f7">
+            <div class="stat-label">Categories</div>
+            <div class="stat-value">${Object.keys(s.category_breakdown || {}).length}</div>
+            <div class="stat-sub">distinct root cause types</div>
+        </div>
+    `;
+}
+
+// ── Charts ─────────────────────────────────────────────────────────────────
+
+const SEVERITY_COLORS = {
+    critical: '#f87171',
+    high: '#fb923c',
+    medium: '#facc15',
+    low: '#4ade80'
+};
+const CAT_COLOR = '#818cf8';
+
+function renderCharts(stats) {
+    // Severity donut
+    const sevData = stats.severity_breakdown || {};
+    const sevLabels = Object.keys(sevData);
+    const sevValues = Object.values(sevData);
+    const sevColors = sevLabels.map(l => SEVERITY_COLORS[l] || '#64748b');
+
+    if (sevChart) sevChart.destroy();
+    sevChart = new Chart(document.getElementById('severityChart'), {
+        type: 'doughnut',
+        data: { labels: sevLabels, datasets: [{ data: sevValues, backgroundColor: sevColors, borderWidth: 0 }] },
+        options: {
+            cutout: '65%',
+            plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 12, font: { size: 11 } } } }
+        }
+    });
+
+    // Category bar
+    const catData = stats.category_breakdown || {};
+    const catLabels = Object.keys(catData).map(k => k.replace(/_/g, ' '));
+    const catValues = Object.values(catData);
+
+    if (catChart) catChart.destroy();
+    catChart = new Chart(document.getElementById('categoryChart'), {
+        type: 'bar',
+        data: {
+            labels: catLabels,
+            datasets: [{
+                label: 'Incidents',
+                data: catValues,
+                backgroundColor: 'rgba(129,140,248,0.6)',
+                borderColor: '#818cf8',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#64748b' }, grid: { color: '#334155' } },
+                y: { ticks: { color: '#94a3b8' }, grid: { display: false } }
             }
         }
+    });
+}
 
-        function renderStatistics(stats) {
-            const grid = document.getElementById('statsGrid');
+// ── Apps dropdown ──────────────────────────────────────────────────────────
 
-            let severityBreakdown = '';
-            for (const [sev, count] of Object.entries(stats.severity_breakdown || {})) {
-                severityBreakdown += `
-                    <div class="breakdown-item">
-                        <div class="breakdown-label">${sev}</div>
-                        <div class="breakdown-value">${count}</div>
-                    </div>
-                `;
-            }
+async function loadApps() {
+    try {
+        const r = await fetch(`${API}/dashboard/apps`);
+        const data = await r.json();
+        const sel = document.getElementById('filterApp');
+        (data.apps || []).forEach(app => {
+            const opt = document.createElement('option');
+            opt.value = app; opt.textContent = app;
+            sel.appendChild(opt);
+        });
+    } catch (e) { /* silent */ }
+}
 
-            let categoryBreakdown = '';
-            for (const [cat, count] of Object.entries(stats.category_breakdown || {})) {
-                categoryBreakdown += `
-                    <div class="breakdown-item">
-                        <div class="breakdown-label">${cat.replace(/_/g, ' ')}</div>
-                        <div class="breakdown-value">${count}</div>
-                    </div>
-                `;
-            }
+// ── Reports list ───────────────────────────────────────────────────────────
 
-            grid.innerHTML = `
-                <div class="stat-card">
-                    <h3>Total Investigations</h3>
-                    <div class="stat-value">${stats.total_investigations || 0}</div>
-                </div>
-                <div class="stat-card">
-                    <h3>Code Changes Involved</h3>
-                    <div class="stat-value">${stats.code_changes_involved || 0}</div>
-                </div>
-                <div class="stat-card">
-                    <h3>Last 24 Hours</h3>
-                    <div class="stat-value">${stats.recent_24h || 0}</div>
-                </div>
-                <div class="stat-card">
-                    <h3>Severity Breakdown</h3>
-                    <div class="breakdown-grid">${severityBreakdown || '<p style="color: #718096;">No data</p>'}</div>
-                </div>
-                <div class="stat-card">
-                    <h3>Top Applications</h3>
-                    ${(stats.top_apps || []).slice(0, 3).map(app =>
-                        `<div style="margin: 5px 0; color: #4a5568;">${app.app}: <strong>${app.count}</strong></div>`
-                    ).join('') || '<p style="color: #718096;">No data</p>'}
-                </div>
-                <div class="stat-card">
-                    <h3>Category Breakdown</h3>
-                    <div class="breakdown-grid">${categoryBreakdown || '<p style="color: #718096;">No data</p>'}</div>
-                </div>
-            `;
+async function loadReports(filters = {}) {
+    const container = document.getElementById('reportsContainer');
+    container.innerHTML = '<div class="loading">Loading…</div>';
+
+    try {
+        const params = new URLSearchParams({ limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE, ...filters });
+        const r = await fetch(`${API}/dashboard/reports?${params}`);
+        const data = await r.json();
+        totalReports = data.total || 0;
+        document.getElementById('reportCount').textContent = `${totalReports} total`;
+
+        if (data.reports && data.reports.length > 0) {
+            renderReports(data.reports);
+            renderPagination(totalReports);
+        } else {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>No Reports Found</h3>
+                    <p>Try adjusting filters or trigger some test alerts.</p>
+                </div>`;
+            document.getElementById('pagination').innerHTML = '';
         }
+    } catch (e) {
+        container.innerHTML = '<div class="error-msg" style="margin:16px 20px">Failed to load reports — is the API running at port 8000?</div>';
+    }
+}
 
-        async function loadApps() {
-            try {
-                const response = await fetch(`${API_BASE}/dashboard/apps`);
-                const data = await response.json();
-                const select = document.getElementById('filterApp');
-                data.apps.forEach(app => {
-                    const option = document.createElement('option');
-                    option.value = app;
-                    option.textContent = app;
-                    select.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Failed to load apps:', error);
-            }
-        }
+function severityBadge(s) {
+    return `<span class="badge badge-${s}">${s.toUpperCase()}</span>`;
+}
+function envBadge(e) {
+    return `<span class="badge badge-env-${e}">${e}</span>`;
+}
+function catBadge(c) {
+    return `<span class="badge badge-category">${c.replace(/_/g,' ')}</span>`;
+}
 
-        async function loadReports(filters = {}) {
-            const container = document.getElementById('reportsContainer');
-            container.innerHTML = '<div class="loading">Loading reports...</div>';
-
-            try {
-                const params = new URLSearchParams({
-                    limit: pageSize,
-                    offset: currentPage * pageSize,
-                    ...filters
-                });
-
-                const response = await fetch(`${API_BASE}/dashboard/reports?${params}`);
-                const data = await response.json();
-
-                if (data.reports && data.reports.length > 0) {
-                    renderReports(data.reports);
-                    renderPagination(data.total);
-                } else {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <h3>No Reports Found</h3>
-                            <p>Try adjusting your filters or send some test alerts.</p>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('Failed to load reports:', error);
-                container.innerHTML = '<div class="error">Failed to load reports. Make sure the API is running.</div>';
-            }
-        }
-
-        function renderReports(reports) {
-            const container = document.getElementById('reportsContainer');
-            container.innerHTML = reports.map(report => `
-                <div class="report-item" onclick="viewReport('${report.id}')">
-                    <div class="report-header">
-                        <div class="report-title">${report.app_name}</div>
-                        <span class="severity-badge severity-${report.severity}">${report.severity.toUpperCase()}</span>
-                    </div>
-                    <div class="report-meta">
-                        <div class="meta-item">
-                            <span class="meta-label">Environment:</span>
-                            ${report.environment}
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Alert Time:</span>
-                            ${new Date(report.alert_time).toLocaleString()}
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Category:</span>
-                            <span class="category-badge">${report.root_cause_category.replace(/_/g, ' ')}</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Confidence:</span>
-                            ${report.confidence_level} (${report.confidence_percentage}%)
-                        </div>
-                    </div>
-                    <div class="report-meta">
-                        <div class="meta-item">
-                            <span class="meta-label">Errors:</span>
-                            ${report.error_count}
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Investigation Steps:</span>
-                            ${report.step_count}
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Code Changes:</span>
-                            ${report.code_change_count}
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Code Change Involved:</span>
-                            ${report.is_code_change ? 'Yes' : 'No'}
-                        </div>
-                    </div>
+function renderReports(reports) {
+    const container = document.getElementById('reportsContainer');
+    container.innerHTML = reports.map(r => `
+        <div class="report-item" onclick="viewReport('${r.id}')">
+            <div class="report-main">
+                <div class="report-title-row">
+                    <span class="report-app">${r.app_name}</span>
+                    ${severityBadge(r.severity)}
+                    ${envBadge(r.environment)}
+                    ${catBadge(r.root_cause_category)}
+                </div>
+                <div class="report-meta-row">
+                    <span><strong>ID:</strong> <span class="report-id">${r.id}</span></span>
+                    <span><strong>Alert:</strong> ${new Date(r.alert_time).toLocaleString()}</span>
+                    <span><strong>Confidence:</strong> ${r.confidence_level} (${r.confidence_percentage}%)</span>
+                    <span><strong>Steps:</strong> ${r.step_count}</span>
+                    ${r.code_change_count > 0 ? `<span><strong>Commits:</strong> ${r.code_change_count}</span>` : ''}
+                    ${r.is_code_change ? `<span style="color:#f87171">⚠ Code change involved</span>` : ''}
+                </div>
+                <div class="confidence-bar-wrap">
                     <div class="confidence-bar">
-                        <div class="confidence-fill" style="width: ${report.confidence_percentage}%"></div>
+                        <div class="confidence-fill" style="width:${r.confidence_percentage}%"></div>
                     </div>
                 </div>
-            `).join('');
+            </div>
+            <div>
+                <button class="btn btn-ghost" style="font-size:0.8em">View →</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderPagination(total) {
+    const pagination = document.getElementById('pagination');
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    if (totalPages <= 1) { pagination.innerHTML = ''; return; }
+
+    let html = '';
+    if (currentPage > 0)
+        html += `<button class="btn btn-ghost" onclick="changePage(${currentPage-1})">← Prev</button>`;
+    html += `<span class="page-info">Page ${currentPage+1} of ${totalPages}</span>`;
+    if (currentPage < totalPages - 1)
+        html += `<button class="btn btn-ghost" onclick="changePage(${currentPage+1})">Next →</button>`;
+    pagination.innerHTML = html;
+}
+
+function changePage(page) {
+    currentPage = page;
+    applyFilters();
+}
+
+// ── Filters ────────────────────────────────────────────────────────────────
+
+function applyFilters() {
+    const filters = {};
+    const app = document.getElementById('filterApp').value;
+    const sev = document.getElementById('filterSeverity').value;
+    const env = document.getElementById('filterEnvironment').value;
+    const cat = document.getElementById('filterCategory').value;
+    const days = document.getElementById('filterDays').value;
+    if (app) filters.app_name = app;
+    if (sev) filters.severity = sev;
+    if (env) filters.environment = env;
+    if (cat) filters.category = cat;
+    if (days) filters.days = days;
+    loadReports(filters);
+}
+
+function resetFilters() {
+    ['filterApp','filterSeverity','filterEnvironment','filterCategory','filterDays']
+        .forEach(id => document.getElementById(id).value = '');
+    document.getElementById('searchInput').value = '';
+    currentPage = 0;
+    loadReports();
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────
+
+async function searchReports() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q || q.length < 3) { alert('Enter at least 3 characters to search.'); return; }
+
+    const container = document.getElementById('reportsContainer');
+    container.innerHTML = '<div class="loading">Searching…</div>';
+
+    try {
+        const r = await fetch(`${API}/dashboard/search?q=${encodeURIComponent(q)}`);
+        const data = await r.json();
+        document.getElementById('reportCount').textContent = `${data.count} results for "${q}"`;
+        document.getElementById('pagination').innerHTML = '';
+
+        if (data.reports && data.reports.length > 0) {
+            renderReports(data.reports);
+        } else {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>No Results</h3>
+                    <p>No reports found matching "<em>${q}</em>"</p>
+                </div>`;
         }
+    } catch (e) {
+        container.innerHTML = '<div class="error-msg" style="margin:16px 20px">Search failed.</div>';
+    }
+}
 
-        function renderPagination(total) {
-            const pagination = document.getElementById('pagination');
-            const totalPages = Math.ceil(total / pageSize);
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    currentPage = 0;
+    loadReports();
+}
 
-            if (totalPages <= 1) {
-                pagination.innerHTML = '';
-                return;
-            }
+// ── Report Detail Modal ────────────────────────────────────────────────────
 
-            let html = '';
-            if (currentPage > 0) {
-                html += `<button class="btn btn-primary" onclick="changePage(${currentPage - 1})">Previous</button>`;
-            }
+async function viewReport(reportId) {
+    document.getElementById('modalTitle').textContent = 'Loading…';
+    document.getElementById('modalSubtitle').textContent = reportId;
+    document.getElementById('modalBody').innerHTML = '<div class="loading">Fetching investigation details…</div>';
+    document.getElementById('modalOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
 
-            html += `<span>Page ${currentPage + 1} of ${totalPages}</span>`;
+    try {
+        const r = await fetch(`${API}/dashboard/reports/${reportId}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const report = await r.json();
+        renderModal(report);
+    } catch (e) {
+        document.getElementById('modalBody').innerHTML =
+            `<div class="error-msg">Failed to load report: ${e.message}</div>`;
+    }
+}
 
-            if (currentPage < totalPages - 1) {
-                html += `<button class="btn btn-primary" onclick="changePage(${currentPage + 1})">Next</button>`;
-            }
+function avatarColor(name) {
+    const colors = ['#1976d2','#388e3c','#d32f2f','#7b1fa2','#f57c00','#00796b','#c2185b','#5d4037'];
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return colors[Math.abs(h) % colors.length];
+}
 
-            pagination.innerHTML = html;
-        }
+function initials(name) {
+    return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+}
 
-        function changePage(page) {
-            currentPage = page;
-            applyFilters();
-        }
+function barClass(pct) {
+    if (pct >= 70) return 'hyp-bar-high';
+    if (pct >= 40) return 'hyp-bar-mid';
+    return 'hyp-bar-low';
+}
 
-        function applyFilters() {
-            const filters = {};
+function sevMbadge(s) {
+    return `<span class="mbadge mbadge-${s}">${s.toUpperCase()}</span>`;
+}
+function envMbadge(e) {
+    return `<span class="mbadge mbadge-${e}">${e.toUpperCase()}</span>`;
+}
 
-            const app = document.getElementById('filterApp').value;
-            if (app) filters.app_name = app;
+function renderModal(r) {
+    const steps    = r.investigation_steps || [];
+    const hyps     = r.hypotheses || [];
+    const commits  = r.code_changes || [];
+    const errors   = r.errors || [];
+    const fixes    = r.possible_fixes || [];
+    const ruledOut = r.ruled_out_categories || [];
+    const logEv    = r.log_evidence || null;
 
-            const severity = document.getElementById('filterSeverity').value;
-            if (severity) filters.severity = severity;
+    // Header
+    document.getElementById('modalTitle').textContent = `🚨 ${r.app_name}`;
+    document.getElementById('modalSub').innerHTML =
+        `${sevMbadge(r.severity)} ${envMbadge(r.environment)}
+         <span class="mbadge mbadge-cat">${r.root_cause_category.replace(/_/g,' ')}</span>
+         ${r.is_code_change ? '<span class="mbadge mbadge-code">Code Change Involved</span>' : ''}`;
+    document.getElementById('modalSubtitle').textContent = `Report ID: ${r.id}`;
 
-            const environment = document.getElementById('filterEnvironment').value;
-            if (environment) filters.environment = environment;
+    // ── SECTION 0: Alert ──────────────────────────────────────────────────────
+    const alertHtml = `
+    <div class="ms">
+        <div class="m-alert">
+            <h4>🚨 Alert Received — ${r.severity.toUpperCase()}</h4>
+            <table class="m-alert-table">
+                <tr>
+                    <td>Application:</td><td><strong>${r.app_name}</strong></td>
+                    <td>Severity:</td><td>${sevMbadge(r.severity)}</td>
+                </tr>
+                <tr>
+                    <td>Environment:</td><td>${envMbadge(r.environment)}</td>
+                    <td>Alert Time:</td><td>${new Date(r.alert_time).toLocaleString()}</td>
+                </tr>
+                <tr>
+                    <td>Confidence:</td><td><strong>${r.confidence_percentage}%</strong> (${r.confidence_level})</td>
+                    <td>Steps Run:</td><td>${r.step_count} investigation steps</td>
+                </tr>
+            </table>
+            ${errors.length > 0 ? `
+            <h4 style="color:#c53030;margin-bottom:8px;">Errors Detected (${errors.length}):</h4>
+            <ol class="m-err-list">
+                ${errors.map(e => `
+                    <li>
+                        <code>${e.error_message}</code>
+                        ${e.correlation_id ? `<span style="font-size:0.75em;color:#718096;margin-left:8px;">corr-id: ${e.correlation_id}</span>` : '<span style="font-size:0.75em;color:#718096;margin-left:8px;">(no correlation ID)</span>'}
+                    </li>
+                `).join('')}
+            </ol>` : ''}
+        </div>
+    </div>`;
 
-            const category = document.getElementById('filterCategory').value;
-            if (category) filters.category = category;
-
-            const days = document.getElementById('filterDays').value;
-            if (days) filters.days = days;
-
-            loadReports(filters);
-        }
-
-        function resetFilters() {
-            document.getElementById('filterApp').value = '';
-            document.getElementById('filterSeverity').value = '';
-            document.getElementById('filterEnvironment').value = '';
-            document.getElementById('filterCategory').value = '';
-            document.getElementById('filterDays').value = '';
-            currentPage = 0;
-            loadReports();
-        }
-
-        async function searchReports() {
-            const query = document.getElementById('searchInput').value.trim();
-            if (!query || query.length < 3) {
-                alert('Please enter at least 3 characters to search');
-                return;
-            }
-
-            const container = document.getElementById('reportsContainer');
-            container.innerHTML = '<div class="loading">Searching...</div>';
-
-            try {
-                const response = await fetch(`${API_BASE}/dashboard/search?q=${encodeURIComponent(query)}`);
-                const data = await response.json();
-
-                if (data.reports && data.reports.length > 0) {
-                    renderReports(data.reports);
-                    document.getElementById('pagination').innerHTML = `<p>Found ${data.count} results for "${query}"</p>`;
-                } else {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <h3>No Results Found</h3>
-                            <p>No reports found matching "${query}"</p>
+    // ── SECTION 1: Classification ─────────────────────────────────────────────
+    const top = hyps[0] || null;
+    const classHtml = hyps.length > 0 ? `
+    <div class="ms">
+        <div class="ms-title"><span class="ms-num">1</span> Classification</div>
+        <div class="class-grid">
+            <div class="class-panel">
+                <h4>Initial Hypotheses (Pattern Analysis)</h4>
+                ${hyps.map(h => `
+                    <div class="hyp-row">
+                        <div class="hyp-row-label">
+                            <span>#${h.rank} ${h.category.replace(/_/g,' ')}</span>
+                            <span>${h.confidence_percentage.toFixed(1)}%</span>
                         </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('Search failed:', error);
-                container.innerHTML = '<div class="error">Search failed. Please try again.</div>';
-            }
-        }
+                        <div class="hyp-bar-outer">
+                            <div class="hyp-bar-inner ${barClass(h.confidence_percentage)}"
+                                 style="width:${Math.min(h.confidence_percentage,100)}%"></div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="class-panel">
+                <h4>Final Classification Result</h4>
+                ${top ? `
+                <div class="hyp-row">
+                    <div class="hyp-row-label">
+                        <span><strong>${top.category.replace(/_/g,' ')}</strong></span>
+                        <span>${r.confidence_percentage}%</span>
+                    </div>
+                    <div class="hyp-bar-outer" style="height:14px">
+                        <div class="hyp-bar-inner hyp-bar-high" style="width:${Math.min(r.confidence_percentage,100)}%"></div>
+                    </div>
+                </div>
+                <div style="margin-top:16px;font-size:0.85em;color:#4a5568;">
+                    <strong>Confidence Level:</strong> ${r.confidence_level}<br>
+                    <strong>Category:</strong> ${r.root_cause_category.replace(/_/g,' ')}<br>
+                    <strong>Code Change Involved:</strong> ${r.is_code_change ? '⚠️ Yes' : '✅ No'}
+                </div>` : ''}
+                <div class="class-result">
+                    ✅ <strong>Final Classification:</strong> ${r.root_cause_category.replace(/_/g,' ')} (${r.confidence_percentage}% — ${r.confidence_level})
+                </div>
+            </div>
+        </div>
+    </div>` : '';
 
-        function viewReport(reportId) {
-            window.open(`http://localhost:8000/docs#/dashboard/get_report_dashboard_reports__report_id__get`, '_blank');
-        }
+    // ── SECTION 2: Evidence Gathering ─────────────────────────────────────────
+    // Group steps by tool
+    const lokiSteps = steps.filter(s => s.tool_called === 'loki');
+    const gitSteps  = steps.filter(s => s.tool_called === 'git_blame');
+    const jiraSteps = steps.filter(s => s.tool_called === 'jira');
+    const doneSteps = steps.filter(s => !s.tool_called || s.decision === 'DONE');
 
-        // Auto-refresh every 30 seconds
-        setInterval(() => {
-            loadStatistics();
-            applyFilters();
-        }, 30000);
-    </script>
+    const lokiHtml = (logEv || lokiSteps.length > 0) ? `
+        <div class="evidence-card">
+            <h4>📝 LOKI — Log Analysis</h4>
+            ${lokiSteps.map(s => `<p class="ev-meta"><strong>Query:</strong> ${s.reasoning}</p>`).join('')}
+            ${logEv && logEv.stack_traces && logEv.stack_traces.length > 0 ? `
+                <p style="color:#c53030;font-weight:600;margin-bottom:6px;">🔴 Stack Traces Found:</p>
+                <div class="code-blk">${logEv.stack_traces.join('\n\n')}</div>` : ''}
+            ${logEv && logEv.key_log_lines && logEv.key_log_lines.length > 0 ? `
+                <p style="font-weight:600;margin:12px 0 6px;color:#4a5568;">🔑 Key Log Lines:</p>
+                <div class="code-blk">${logEv.key_log_lines.join('\n')}</div>` : ''}
+            ${logEv && logEv.slow_queries && logEv.slow_queries.length > 0 ? `
+                <p style="font-weight:600;margin:12px 0 6px;color:#4a5568;">🐌 Slow Queries Detected:</p>
+                <div class="code-blk">${logEv.slow_queries.join('\n')}</div>` : ''}
+            ${logEv ? `
+            <table class="m-table">
+                <tr><th>Metric</th><th>Value</th></tr>
+                <tr><td>Total Error Count</td><td><strong>${logEv.total_error_count}</strong></td></tr>
+                <tr><td>Stack Traces</td><td>${(logEv.stack_traces||[]).length}</td></tr>
+                <tr><td>Key Log Lines</td><td>${(logEv.key_log_lines||[]).length}</td></tr>
+                <tr><td>Slow Queries</td><td>${(logEv.slow_queries||[]).length}</td></tr>
+                <tr><td>Retrieval Method</td><td>${logEv.evidence_path || '—'}</td></tr>
+                ${logEv.correlation_id ? `<tr><td>Correlation ID</td><td><code>${logEv.correlation_id}</code></td></tr>` : ''}
+            </table>` : ''}
+            ${lokiSteps.map(s => s.result_summary ? `
+                <div style="background:#f0fff4;border-left:3px solid #38a169;padding:10px;border-radius:4px;font-size:0.85em;color:#276749;margin-top:10px;">
+                    ✅ ${s.result_summary}
+                </div>` : '').join('')}
+        </div>` : '';
+
+    const gitHtml = commits.length > 0 ? `
+        <div class="evidence-card">
+            <h4>💻 GIT — Code Change Analysis</h4>
+            ${gitSteps.map(s => `<p class="ev-meta"><strong>Query:</strong> ${s.reasoning}</p>`).join('')}
+            <div class="timeline">
+                ${commits.map(c => `
+                    <div class="tl-item">
+                        <strong>Commit: ${c.commit_hash}</strong>
+                        &nbsp;·&nbsp;
+                        <span style="font-size:0.85em;color:#718096">${c.timestamp ? new Date(c.timestamp).toLocaleString() : ''}</span>
+                        <div class="tl-meta">
+                            <span class="mbadge mbadge-info">👤 ${c.author}</span>
+                            ${c.jira_ticket ? `<span class="mbadge mbadge-warn">🎫 ${c.jira_ticket}</span>` : ''}
+                            ${(c.risk_flags||[]).map(f => `<span class="mbadge mbadge-critical">⚠ ${f.replace(/_/g,' ')}</span>`).join('')}
+                        </div>
+                        <p class="tl-msg"><strong>Message:</strong> ${c.message}</p>
+                        ${c.files_changed && c.files_changed.length > 0 ? `
+                        <div class="code-blk">${c.files_changed.map(f => `📁 ${f}`).join('\n')}</div>` : ''}
+                        ${c.risk_flags && c.risk_flags.length > 0 ? `
+                        <div class="tl-warn">⚠️ <strong>Risk Flags:</strong> ${c.risk_flags.map(f => f.replace(/_/g,' ')).join(' · ')}</div>` : ''}
+                    </div>
+                `).join('')}
+            </div>
+            ${gitSteps.map(s => s.result_summary ? `
+                <div style="background:#fffaf0;border-left:3px solid #ed8936;padding:10px;border-radius:4px;font-size:0.85em;color:#7b341e;margin-top:10px;">
+                    ℹ️ ${s.result_summary}
+                </div>` : '').join('')}
+        </div>` : '';
+
+    const jiraHtml = jiraSteps.length > 0 ? `
+        <div class="evidence-card">
+            <h4>🎫 JIRA — Ticket Analysis</h4>
+            ${jiraSteps.map(s => `
+                <div class="jira-card">
+                    <h4>${s.reasoning}</h4>
+                    ${s.result_summary ? `
+                    <p style="font-size:0.88em;color:#2c5282;margin-top:8px;">${s.result_summary}</p>` : ''}
+                </div>
+            `).join('')}
+        </div>` : '';
+
+    const evidenceHtml = (lokiHtml || gitHtml || jiraHtml) ? `
+    <div class="ms">
+        <div class="ms-title"><span class="ms-num">2</span> Tool Execution — Evidence Gathering</div>
+        ${lokiHtml}
+        ${gitHtml}
+        ${jiraHtml}
+    </div>` : '';
+
+    // ── SECTION 3: Who Changed What ───────────────────────────────────────────
+    const whoHtml = commits.length > 0 ? `
+    <div class="ms">
+        <div class="ms-title"><span class="ms-num">3</span> Who Changed What?</div>
+        ${[...new Map(commits.map(c => [c.author, c])).values()].map(c => `
+            <div class="person-card">
+                <div class="person-avatar" style="background:${avatarColor(c.author)}">${initials(c.author)}</div>
+                <div class="person-info">
+                    <h4>${c.author}</h4>
+                    <p><strong>Commits in this investigation:</strong>
+                        ${commits.filter(x => x.author === c.author).length}
+                    </p>
+                    <ul>
+                        ${commits.filter(x => x.author === c.author).map(x => `
+                            <li><code>${x.commit_hash}</code> — ${x.message.substring(0, 80)}${x.message.length > 80 ? '…' : ''}</li>
+                        `).join('')}
+                    </ul>
+                    ${commits.filter(x => x.author === c.author).some(x => x.risk_flags && x.risk_flags.length > 0) ? `
+                    <p class="person-warn">⚠️ Risk flags: ${
+                        [...new Set(commits.filter(x => x.author === c.author)
+                            .flatMap(x => x.risk_flags || []))].map(f => f.replace(/_/g,' ')).join(', ')
+                    }</p>` : ''}
+                </div>
+            </div>
+        `).join('')}
+    </div>` : '';
+
+    // ── SECTION 4: Action Plan ────────────────────────────────────────────────
+    const pClass = p => p === 1 ? 'p1' : p === 2 ? 'p2' : p === 3 ? 'p3' : 'p4';
+    const pLabel = p => p === 1 ? 'PRIORITY 1 — IMMEDIATE' : p === 2 ? `PRIORITY 2 — TODAY` : p === 3 ? 'PRIORITY 3 — THIS WEEK' : `PRIORITY ${p}`;
+
+    const fixesHtml = fixes.length > 0 ? `
+    <div class="ms">
+        <div class="ms-title"><span class="ms-num">${commits.length > 0 ? 4 : 3}</span> Developer Action Plan</div>
+        ${fixes.map(f => `
+            <div class="action-item ${pClass(f.priority)}">
+                <span class="p-badge">${pLabel(f.priority)}</span>
+                <h4>${f.action}</h4>
+                <p class="rationale"><strong>Why:</strong> ${f.rationale}</p>
+                <p class="impact"><strong>Impact:</strong> ${f.estimated_impact}</p>
+            </div>
+        `).join('')}
+    </div>` : '';
+
+    // ── SECTION 5: Ruled Out ──────────────────────────────────────────────────
+    const ruledHtml = ruledOut.length > 0 ? `
+    <div class="ms">
+        <div class="ms-title">Ruled Out Categories</div>
+        <table class="ruled-table">
+            <tr><th>Category</th><th>Reason</th><th>Evidence</th></tr>
+            ${ruledOut.map(ro => `
+                <tr>
+                    <td><span class="mbadge mbadge-cat">${ro.category.replace(/_/g,' ')}</span></td>
+                    <td>${ro.reason}</td>
+                    <td style="color:#718096;font-size:0.9em">${ro.evidence}</td>
+                </tr>
+            `).join('')}
+        </table>
+    </div>` : '';
+
+    // ── Root Cause Summary ────────────────────────────────────────────────────
+    const summaryHtml = `
+    <div class="ms">
+        <div class="ms-title">Root Cause Summary</div>
+        <div class="rc-box">
+            <h4>🎯 Identified Root Cause:</h4>
+            <p>${r.root_cause || 'Root cause: ' + r.root_cause_category.replace(/_/g,' ')}</p>
+        </div>
+        ${steps.length > 0 ? `
+        <table class="m-table" style="margin-top:16px;">
+            <tr><th>Tool</th><th>Key Finding</th></tr>
+            ${steps.filter(s => s.tool_called && s.result_summary).map(s => `
+                <tr>
+                    <td><strong>${s.tool_called.toUpperCase()}</strong></td>
+                    <td>${s.result_summary}</td>
+                </tr>
+            `).join('')}
+            ${steps.filter(s => s.decision === 'DONE').map(s => `
+                <tr>
+                    <td><strong>CONCLUSION</strong></td>
+                    <td>${s.reasoning}</td>
+                </tr>
+            `).join('')}
+        </table>` : ''}
+    </div>`;
+
+    document.getElementById('modalBody').innerHTML =
+        alertHtml + classHtml + evidenceHtml + whoHtml + fixesHtml + ruledHtml + summaryHtml;
+
+    // Footer
+    document.getElementById('modalFoot').style.display = 'flex';
+    document.getElementById('modalFootLinks').innerHTML = `
+        <a href="/static/${r.id}.json" target="_blank">{ } Raw JSON</a>
+        <a href="/static/${r.id}.md" target="_blank">📄 Markdown Report</a>
+    `;
+}
+
+function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+function closeModalOnOverlay(e) {
+    if (e.target === document.getElementById('modalOverlay')) closeModal();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
 </body>
 </html>

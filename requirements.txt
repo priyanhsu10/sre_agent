@@ -28,3 +28,6 @@ anthropic==0.18.1  # Claude API
 
 # Database (Dashboard Enhancement)
 sqlalchemy>=2.0.36
+
+# Static file serving (Dashboard HTML)
+aiofiles>=23.2.1

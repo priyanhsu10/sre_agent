@@ -49,13 +49,15 @@ class Settings(BaseSettings):
 
     # LLM Integration (Optional - for intelligent fallback)
     LLM_ENABLED: bool = Field(default=False, description="Enable LLM-enhanced analysis")
-    LLM_PROVIDER: str = Field(default="anthropic", description="LLM provider (anthropic, openai, mock)")
-    LLM_API_KEY: str = Field(default="", description="LLM API key")
+    LLM_PROVIDER: str = Field(default="anthropic", description="LLM provider (anthropic, openai, custom, mock)")
+    LLM_API_KEY: str = Field(default="", description="LLM API key / Bearer token")
     LLM_MODEL: str = Field(default="claude-3-5-sonnet-20241022", description="LLM model to use")
     LLM_MAX_TOKENS: int = Field(default=2048, description="Max tokens per LLM request")
     LLM_TEMPERATURE: float = Field(default=0.0, description="LLM temperature (0=deterministic)")
     LLM_TIMEOUT: int = Field(default=30, description="LLM request timeout in seconds")
     LLM_CONFIDENCE_THRESHOLD: float = Field(default=40.0, description="Use LLM if pattern confidence < this")
+    # Custom / internal provider
+    LLM_BASE_URL: str = Field(default="", description="Base URL for custom/internal LLM (e.g. http://internal-llm.company.com/v1)")
 
     class Config:
         env_file = ".env"

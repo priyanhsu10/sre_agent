@@ -69,14 +69,16 @@ class AgentOrchestrator:
         # Initialize classifier (LLM-enhanced if enabled)
         llm_config = None
         if settings.LLM_ENABLED and LLM_AVAILABLE and settings.LLM_API_KEY:
-            logger.info("LLM-enhanced classification enabled")
+            provider = LLMProvider(settings.LLM_PROVIDER)
+            logger.info(f"LLM-enhanced classification enabled (provider={provider.value})")
             llm_config = LLMConfig(
-                provider=LLMProvider(settings.LLM_PROVIDER),
+                provider=provider,
                 api_key=settings.LLM_API_KEY,
                 model=settings.LLM_MODEL,
                 max_tokens=settings.LLM_MAX_TOKENS,
                 temperature=settings.LLM_TEMPERATURE,
-                timeout=settings.LLM_TIMEOUT
+                timeout=settings.LLM_TIMEOUT,
+                base_url=settings.LLM_BASE_URL or None,
             )
             self.classifier = LLMEnhancedClassifier(llm_config)
         else:

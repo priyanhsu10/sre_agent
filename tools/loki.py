@@ -247,7 +247,8 @@ class LokiLogRetriever(BaseTool):
             async with session.get(
                 url,
                 params=params,
-                timeout=aiohttp.ClientTimeout(total=self.timeout)
+                timeout=aiohttp.ClientTimeout(total=self.timeout),
+                ssl=False
             ) as response:
                 if response.status != 200:
                     logger.error(f"Loki API error: {response.status}")
@@ -378,7 +379,8 @@ class LokiLogRetriever(BaseTool):
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     url,
-                    timeout=aiohttp.ClientTimeout(total=5)
+                    timeout=aiohttp.ClientTimeout(total=5),
+                    ssl=False
                 ) as response:
                     return response.status == 200
         except Exception:

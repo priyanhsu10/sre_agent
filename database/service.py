@@ -14,6 +14,7 @@ from database.models import (
     Investigation, InvestigationError, Hypothesis, InvestigationStep,
     CodeChange, LogEvidence, JiraTicket, init_database, get_session
 )
+from sqlalchemy.orm import joinedload
 from models.report import RCAReport
 
 logger = logging.getLogger(__name__)
@@ -47,9 +48,27 @@ class ReportDatabaseService:
                 alert_time=report.alert_time,
                 created_at=report.generated_at,
                 root_cause_category=report.root_cause_category.value,
+                root_cause=report.root_cause,
                 confidence_level=report.confidence_level.value,
                 confidence_percentage=self._extract_confidence_percentage(report),
                 is_code_change=report.is_code_change,
+                possible_fixes=[
+                    {
+                        'priority': f.priority,
+                        'action': f.action,
+                        'rationale': f.rationale,
+                        'estimated_impact': f.estimated_impact
+                    }
+                    for f in report.possible_fixes
+                ],
+                ruled_out_categories=[
+                    {
+                        'category': r.category.value,
+                        'reason': r.reason,
+                        'evidence': r.evidence
+                    }
+                    for r in report.ruled_out_categories
+                ],
                 status='completed'
             )
             session.add(investigation)
@@ -127,14 +146,20 @@ class ReportDatabaseService:
             session.close()
 
     def get_report(self, report_id: str) -> Optional[Dict[str, Any]]:
-        """Get single report by ID"""
+        """Get single report by ID with full details"""
         session = get_session(self.engine)
         try:
-            investigation = session.query(Investigation).filter_by(id=report_id).first()
+            investigation = (
+                session.query(Investigation)
+                .filter_by(id=report_id)
+                .first()
+            )
             if not investigation:
                 return None
 
-            return self._investigation_to_dict(investigation)
+            # Eagerly fetch log evidence
+            log_ev = session.query(LogEvidence).filter_by(investigation_id=report_id).first()
+            return self._investigation_to_full_dict(investigation, log_ev)
         finally:
             session.close()
 
@@ -262,7 +287,7 @@ class ReportDatabaseService:
             session.close()
 
     def _investigation_to_dict(self, investigation: Investigation) -> Dict[str, Any]:
-        """Convert Investigation ORM object to dict"""
+        """Convert Investigation ORM object to summary dict"""
         return {
             'id': investigation.id,
             'app_name': investigation.app_name,
@@ -279,6 +304,73 @@ class ReportDatabaseService:
             'step_count': len(investigation.steps),
             'code_change_count': len(investigation.code_changes)
         }
+
+    def _investigation_to_full_dict(self, investigation: Investigation, log_ev=None) -> Dict[str, Any]:
+        """Convert Investigation ORM object to full detail dict including all related records"""
+        base = self._investigation_to_dict(investigation)
+
+        # Extra top-level fields
+        base['root_cause'] = investigation.root_cause
+        base['possible_fixes'] = investigation.possible_fixes or []
+        base['ruled_out_categories'] = investigation.ruled_out_categories or []
+
+        base['errors'] = [
+            {
+                'correlation_id': e.correlation_id,
+                'error_message': e.error_message
+            }
+            for e in investigation.errors
+        ]
+
+        base['hypotheses'] = [
+            {
+                'rank': h.rank,
+                'category': h.category,
+                'confidence_percentage': h.confidence_percentage,
+                'confidence_level': h.confidence_level,
+                'reasoning': h.reasoning
+            }
+            for h in sorted(investigation.hypotheses, key=lambda h: h.rank or 99)
+        ]
+
+        base['investigation_steps'] = [
+            {
+                'step_number': s.step_number,
+                'reasoning': s.reasoning,
+                'decision': s.decision,
+                'tool_called': s.tool_called,
+                'result_summary': s.result_summary,
+                'timestamp': s.timestamp.isoformat() if s.timestamp else None
+            }
+            for s in sorted(investigation.steps, key=lambda s: s.step_number)
+        ]
+
+        base['code_changes'] = [
+            {
+                'commit_hash': c.commit_hash,
+                'author': c.author,
+                'timestamp': c.timestamp.isoformat() if c.timestamp else None,
+                'message': c.message,
+                'files_changed': c.files_changed,
+                'jira_ticket': c.jira_ticket,
+                'risk_flags': c.risk_flags
+            }
+            for c in investigation.code_changes
+        ]
+
+        if log_ev:
+            base['log_evidence'] = {
+                'correlation_id': log_ev.correlation_id,
+                'evidence_path': log_ev.evidence_path,
+                'stack_traces': log_ev.stack_traces or [],
+                'key_log_lines': log_ev.key_log_lines or [],
+                'slow_queries': log_ev.slow_queries or [],
+                'total_error_count': log_ev.total_error_count
+            }
+        else:
+            base['log_evidence'] = None
+
+        return base
 
     def _extract_confidence_percentage(self, report: RCAReport) -> float:
         """Extract confidence percentage from hypotheses"""
