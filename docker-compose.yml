@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  sre-agent:
+    build: .
+    container_name: sre-agent
+    ports:
+      - "8000:8000"
+    environment:
+      # Application
+      - APP_NAME=sre-agent
+      - LOG_LEVEL=INFO
+
+      # API
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+
+      # Loki
+      - LOKI_URL=http://loki:3100
+      - LOKI_TIMEOUT_SECONDS=30
+      - LOKI_MAX_LINES=1000
+      - LOKI_LOOKBACK_MINUTES=60
+      - SLOW_QUERY_THRESHOLD_MS=1000
+
+      # Git
+      - GIT_REPOS_ROOT=./repos
+      - GIT_LOOKBACK_DAYS=7
+      - HIGH_CHURN_COMMIT_COUNT=5
+      - MAX_DIFF_LINES=500
+
+      # Jira
+      - JIRA_URL=https://your-jira.atlassian.net
+      - JIRA_USERNAME=${JIRA_USERNAME}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - JIRA_TIMEOUT_SECONDS=10
+      - JIRA_MAX_CONCURRENT_REQUESTS=10
+
+      # Reasoning
+      - CONFIDENCE_THRESHOLD=85.0
+      - MAX_INVESTIGATION_STEPS=10
+
+      # Reports
+      - REPORT_OUTPUT_DIR=./reports
+
+      # Circuit Breaker
+      - CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
+      - CIRCUIT_BREAKER_TIMEOUT_SECONDS=60
+
+    volumes:
+      - ./repos:/app/repos
+      - ./reports:/app/reports
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# Optional: Include Loki for local testing
+#  loki:
+#    image: grafana/loki:latest
+#    ports:
+#      - "3100:3100"
+#    command: -config.file=/etc/loki/local-config.yaml
+
+networks:
+  default:
+    name: sre-agent-network

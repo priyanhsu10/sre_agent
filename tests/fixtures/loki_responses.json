@@ -1,0 +1,68 @@
+{
+  "correlation_id_success": {
+    "status": "success",
+    "data": {
+      "resultType": "streams",
+      "result": [
+        {
+          "stream": {
+            "app": "rt-enricher-service",
+            "level": "error"
+          },
+          "values": [
+            ["1709294130000000000", "ERROR: Connection refused to database postgres.prod.local:5432"],
+            ["1709294131000000000", "psycopg2.OperationalError: could not connect to server"],
+            ["1709294132000000000", "Traceback (most recent call last):\n  File \"db.py\", line 42, in connect\n    conn = psycopg2.connect(dsn)\nConnectionError: Connection refused"],
+            ["1709294133000000000", "Database connection pool exhausted - too many connections"]
+          ]
+        }
+      ]
+    }
+  },
+
+  "fingerprint_fallback": {
+    "status": "success",
+    "data": {
+      "resultType": "streams",
+      "result": [
+        {
+          "stream": {
+            "app": "test-service"
+          },
+          "values": [
+            ["1709294130000000000", "ERROR: DNS resolution failed for backend-api.internal.local"],
+            ["1709294131000000000", "socket.gaierror: Temporary failure in name resolution"],
+            ["1709294132000000000", "FATAL: Could not resolve hostname"]
+          ]
+        }
+      ]
+    }
+  },
+
+  "with_slow_queries": {
+    "status": "success",
+    "data": {
+      "resultType": "streams",
+      "result": [
+        {
+          "stream": {
+            "app": "test-service"
+          },
+          "values": [
+            ["1709294130000000000", "Query executed in 1523 ms: SELECT * FROM orders WHERE status='pending'"],
+            ["1709294131000000000", "Database query took 2100 ms to complete"],
+            ["1709294132000000000", "Slow SQL detected: duration 3500ms"]
+          ]
+        }
+      ]
+    }
+  },
+
+  "empty_result": {
+    "status": "success",
+    "data": {
+      "resultType": "streams",
+      "result": []
+    }
+  }
+}

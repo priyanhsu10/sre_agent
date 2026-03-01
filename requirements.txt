@@ -1,0 +1,24 @@
+# Core dependencies
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+pydantic==2.6.1
+pydantic-settings==2.1.0
+python-dotenv==1.0.1
+
+# Async HTTP client (for tools)
+aiohttp==3.9.3
+httpx==0.26.0
+
+# Testing
+pytest==8.0.0
+pytest-asyncio==0.23.5
+pytest-cov==4.1.0
+
+# Git operations
+GitPython==3.1.41
+
+# Logging
+structlog==24.1.0
+
+# Type checking (dev)
+mypy==1.8.0

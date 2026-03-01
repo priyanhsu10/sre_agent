@@ -1,0 +1,165 @@
+{
+  "db_connectivity_failure": {
+    "app_name": "rt-enricher-service",
+    "alert_time": "2026-03-01T10:15:30Z",
+    "severity": "critical",
+    "environment": "prod",
+    "errors": [
+      {
+        "correlation_id": "db-conn-001",
+        "error_message": "psycopg2.OperationalError: could not connect to server: Connection refused. Is the server running on host postgres.prod.local and accepting TCP/IP connections on port 5432?"
+      },
+      {
+        "correlation_id": "db-conn-002",
+        "error_message": "Database connection pool exhausted - too many connections (max: 100, active: 100)"
+      },
+      {
+        "correlation_id": null,
+        "error_message": "FATAL: connection timeout after 30s to postgres://postgres.prod.local:5432/enricher_db"
+      }
+    ]
+  },
+
+  "dns_failure": {
+    "app_name": "api-gateway-service",
+    "alert_time": "2026-03-01T11:22:45Z",
+    "severity": "high",
+    "environment": "prod",
+    "errors": [
+      {
+        "correlation_id": null,
+        "error_message": "socket.gaierror: [Errno -3] Temporary failure in name resolution for host 'backend-api.internal.local'"
+      },
+      {
+        "correlation_id": "dns-err-501",
+        "error_message": "DNSError: Could not resolve hostname backend-api.internal.local: NXDOMAIN"
+      },
+      {
+        "correlation_id": "dns-err-502",
+        "error_message": "requests.exceptions.ConnectionError: Failed to establish connection: getaddrinfo failed for backend-api.internal.local"
+      }
+    ]
+  },
+
+  "certificate_expiry": {
+    "app_name": "payment-processor-service",
+    "alert_time": "2026-03-01T09:05:12Z",
+    "severity": "critical",
+    "environment": "prod",
+    "errors": [
+      {
+        "correlation_id": "cert-exp-100",
+        "error_message": "ssl.SSLError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired (_ssl.c:1131)"
+      },
+      {
+        "correlation_id": "cert-exp-101",
+        "error_message": "TLS handshake failed for https://payment-gateway.external.com: x509: certificate expired on 2026-02-28"
+      }
+    ]
+  },
+
+  "code_logic_error": {
+    "app_name": "order-service",
+    "alert_time": "2026-03-01T14:33:21Z",
+    "severity": "high",
+    "environment": "prod",
+    "errors": [
+      {
+        "correlation_id": "code-err-200",
+        "error_message": "AttributeError: 'NoneType' object has no attribute 'get' in module order_processor.py, line 156"
+      },
+      {
+        "correlation_id": "code-err-201",
+        "error_message": "KeyError: 'customer_id' - Missing required field in order validation"
+      },
+      {
+        "correlation_id": null,
+        "error_message": "Unhandled exception in calculate_discount(): division by zero at order_calculator.py:89"
+      }
+    ]
+  },
+
+  "mixed_ambiguous": {
+    "app_name": "notification-service",
+    "alert_time": "2026-03-01T16:44:09Z",
+    "severity": "medium",
+    "environment": "staging",
+    "errors": [
+      {
+        "correlation_id": "mixed-001",
+        "error_message": "Connection timeout after 10s while calling https://email-provider.external.com/api/send"
+      },
+      {
+        "correlation_id": "mixed-002",
+        "error_message": "ValueError: Invalid email format in recipient list"
+      },
+      {
+        "correlation_id": null,
+        "error_message": "503 Service Unavailable from upstream service email-provider.external.com"
+      }
+    ]
+  },
+
+  "memory_exhaustion": {
+    "app_name": "data-processor-service",
+    "alert_time": "2026-03-01T08:12:55Z",
+    "severity": "critical",
+    "environment": "prod",
+    "errors": [
+      {
+        "correlation_id": "mem-001",
+        "error_message": "java.lang.OutOfMemoryError: Java heap space exhausted (used: 8GB, max: 8GB)"
+      },
+      {
+        "correlation_id": "mem-002",
+        "error_message": "Cannot allocate memory for buffer pool - memory limit exceeded"
+      },
+      {
+        "correlation_id": null,
+        "error_message": "OOMKilled: Container exceeded memory limit (limit: 8Gi, used: 8.2Gi)"
+      }
+    ]
+  },
+
+  "config_drift": {
+    "app_name": "auth-service",
+    "alert_time": "2026-03-01T12:50:33Z",
+    "severity": "high",
+    "environment": "prod",
+    "errors": [
+      {
+        "correlation_id": "cfg-001",
+        "error_message": "Configuration error: Environment variable JWT_SECRET_KEY not set or empty"
+      },
+      {
+        "correlation_id": "cfg-002",
+        "error_message": "401 Unauthorized: Missing API key in configuration - check API_KEY_VAULT_PATH"
+      },
+      {
+        "correlation_id": null,
+        "error_message": "FileNotFoundError: Config file not found at /etc/auth/config.yaml"
+      }
+    ]
+  },
+
+  "network_intra_service": {
+    "app_name": "checkout-service",
+    "alert_time": "2026-03-01T15:18:27Z",
+    "severity": "high",
+    "environment": "prod",
+    "errors": [
+      {
+        "correlation_id": "net-001",
+        "error_message": "Connection refused when calling inventory-service at http://inventory-service.internal:8080/api/check"
+      },
+      {
+        "correlation_id": "net-002",
+        "error_message": "502 Bad Gateway: Upstream service inventory-service returned invalid response"
+      },
+      {
+        "correlation_id": null,
+        "error_message": "Read timeout after 5s waiting for response from inventory-service"
+      }
+    ]
+  }
+}
