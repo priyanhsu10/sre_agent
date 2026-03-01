@@ -1,35 +1,35 @@
 # SRE Agent - Smart Root Cause Analyser
 
-An autonomous pipeline that receives production alerts, classifies failures, investigates root causes using logs/git/Jira, and generates comprehensive RCA reports.
+An autonomous pipeline that receives production alerts, classifies failures, investigates root causes using logs/git/Jira, and generates comprehensive RCA reports with a live web dashboard.
 
-## 🎯 Features
+## Features
 
-- **🤖 LLM-Enhanced Classification** (NEW): Hybrid AI + rule-based analysis for 90% accuracy on novel errors
-- **🧠 LLM-Enhanced Synthesis** (NEW): AI-powered root cause analysis with intelligent evidence correlation
-- **Intelligent Classification**: Categorizes failures into 8 types (DB, DNS, Cert, Network, Code, Config, Dependency, Memory)
+- **LLM-Enhanced Classification**: Hybrid AI + rule-based analysis for novel errors
+- **LLM-Enhanced Synthesis**: AI-powered root cause analysis with intelligent evidence correlation
+- **8 Failure Categories**: DB, DNS, Certificate, Network, Code, Config, Dependency, Memory
 - **Think-First Protocol**: Always classifies before investigating (prevents wasted tool calls)
-- **Infra-First Checking**: Prioritizes infrastructure checks before code blame
-- **Multi-Tool Investigation**: Integrates Loki (logs), Git (commits), and Jira (tickets)
-- **Null-Safe**: Handles missing correlation IDs with intelligent fallback
-- **Circuit Breakers**: Gracefully handles tool failures
-- **Comprehensive Reports**: Generates JSON + Markdown RCA reports with full investigation trace
-- **Cost-Optimized AI**: Uses free patterns for 80% of alerts, LLM for synthesis and novel classifications (~$0.02/alert)
+- **Multi-Tool Investigation**: Loki (logs), Git (commits), Jira (tickets)
+- **Null-Safe**: Handles missing correlation IDs with intelligent fingerprint fallback
+- **Live Dashboard**: Web UI with charts, filters, auto-refresh, and rich RCA report modals
+- **DB Persistence**: All reports saved to SQLite, queryable via REST API
+- **Custom LLM Provider**: Supports Anthropic, OpenAI, or any internal self-hosted model
+- **SSL Bypass**: Works in internal environments with self-signed certificates
 
-## 📊 Architecture
+## Architecture
 
 ```
 ┌─────────────┐
-│   Webhook   │  Receives alert (202 Accepted)
+│   Webhook   │  POST /webhook/alert → 202 Accepted
 └──────┬──────┘
-       │
+       │ background task
        ▼
 ┌─────────────────┐
-│  Orchestrator   │  Coordinates investigation
+│  Orchestrator   │  Coordinates pipeline
 └──────┬──────────┘
        │
        ▼
 ┌─────────────────┐
-│ Classification  │  Think-first: Classify failure (8 categories)
+│ Classification  │  Think-first: Pattern match + LLM (8 categories)
 └──────┬──────────┘
        │
        ▼
@@ -48,76 +48,54 @@ An autonomous pipeline that receives production alerts, classifies failures, inv
        │
        ▼
 ┌─────────────────┐
-│  Report Gen     │  JSON + Markdown reports
+│  Report Gen     │  JSON + Markdown files + SQLite DB
+└──────┬──────────┘
+       │
+       ▼
+┌─────────────────┐
+│   Dashboard     │  Live web UI at /dashboard-ui
 └─────────────────┘
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
 - Python 3.11+
-- Docker & Docker Compose (optional)
 - Loki instance
 - Jira instance + API token
 - Git repositories for your services
 
 ### Installation
 
-1. **Clone the repository**
-
 ```bash
 git clone <repository-url>
 cd sre_agent
-```
 
-2. **Install dependencies**
-
-```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
 
-3. **Configure environment**
-
-```bash
 cp .env.example .env
 # Edit .env with your configuration
 ```
 
-4. **Set up git repositories**
-
-```bash
-mkdir -p repos
-cd repos
-git clone <your-service-repo-1>
-git clone <your-service-repo-2>
-cd ..
-```
-
-5. **Run the application**
+### Run
 
 ```bash
 python main.py
+# or
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at `http://localhost:8000`
-
-### Docker Deployment
+### Docker
 
 ```bash
-# Build and run
 docker-compose up -d
-
-# View logs
 docker-compose logs -f sre-agent
-
-# Stop
-docker-compose down
 ```
 
-## 📡 API Usage
+## API Usage
 
 ### Send Alert
 
@@ -125,7 +103,7 @@ docker-compose down
 curl -X POST http://localhost:8000/webhook/alert \
   -H "Content-Type: application/json" \
   -d '{
-    "app_name": "rt-enricher-service",
+    "app_name": "payment-service",
     "alert_time": "2026-03-01T10:15:30Z",
     "severity": "critical",
     "environment": "prod",
@@ -139,13 +117,12 @@ curl -X POST http://localhost:8000/webhook/alert \
 ```
 
 **Response (202 Accepted):**
-
 ```json
 {
   "status": "accepted",
-  "investigation_id": "rca-rt-enricher-service-1709294130",
-  "message": "Alert received. Investigation started for rt-enricher-service.",
-  "app_name": "rt-enricher-service",
+  "investigation_id": "rca-payment-service-1709294130",
+  "message": "Alert received. Investigation started for payment-service.",
+  "app_name": "payment-service",
   "severity": "critical",
   "environment": "prod",
   "error_count": 1,
@@ -153,263 +130,187 @@ curl -X POST http://localhost:8000/webhook/alert \
 }
 ```
 
-The investigation runs asynchronously in the background. Reports are written to `./reports/`.
+Investigation runs in the background (~5-10s). Report is saved to DB and `./reports/`.
 
-### Health Check
+### Dashboard
 
-```bash
-curl http://localhost:8000/health
+```
+http://localhost:8000/dashboard-ui
 ```
 
-## 📋 Alert Payload Format
+- Overview stats + charts (severity donut, category bar)
+- Filter by app, severity, environment, category, time range
+- Search by app name
+- Click any report to view full RCA details (root cause, evidence, fixes, trace)
+- Auto-refreshes every 30 seconds
+
+### Dashboard API
+
+```bash
+# List reports
+GET /dashboard/reports?limit=10&offset=0&severity=critical&environment=prod
+
+# Get single report
+GET /dashboard/reports/{report_id}
+
+# Stats
+GET /dashboard/stats
+```
+
+### Other Endpoints
+
+```bash
+GET /health          # App health
+GET /webhook/health  # Webhook health
+GET /docs            # Swagger UI
+```
+
+## Alert Payload
 
 ```json
 {
-  "app_name": "string",              // Required: Service name
-  "alert_time": "2026-03-01T10:00:00Z",  // Required: ISO8601 timestamp
-  "severity": "critical|high|medium",     // Required: Severity level
-  "environment": "prod|staging",          // Required: Environment
-  "errors": [                             // Required: At least 1 error
+  "app_name": "string",                  // Required
+  "alert_time": "2026-03-01T10:00:00Z", // Required: ISO8601
+  "severity": "critical|high|medium",    // Required
+  "environment": "prod|staging",         // Required
+  "errors": [
     {
-      "correlation_id": "string|null",    // Optional: Can be null
-      "error_message": "string"           // Required: Error message
+      "correlation_id": "string|null",   // Optional: null triggers fingerprint fallback
+      "error_message": "string"          // Required
     }
   ]
 }
 ```
 
-**Important**: `correlation_id` can be `null`. The system will use fingerprint-based log retrieval as fallback.
+## Failure Categories
 
-## 🔍 Failure Categories
+| Category | Examples |
+|----------|---------|
+| `db_connectivity` | Connection refused, pool exhausted, postgres errors |
+| `dns_failure` | Name resolution failed, NXDOMAIN |
+| `certificate_expiry` | SSL certificate expired, TLS handshake failure |
+| `network_intra_service` | 502/503, connection timeout between services |
+| `code_logic_error` | NullPointerException, KeyError, AttributeError |
+| `config_drift` | Missing env var, wrong config value |
+| `dependency_failure` | Kafka, Redis, S3 unreachable |
+| `memory_resource_exhaustion` | OOMKilled, heap full, disk full |
 
-The system classifies failures into 8 categories:
+## LLM Configuration
 
-1. **DB Connectivity** - Database connection failures, pool exhaustion
-2. **DNS Failure** - Name resolution failures
-3. **Certificate Expiry** - SSL/TLS certificate issues
-4. **Network/Intra-Service** - Service-to-service communication failures
-5. **Code Logic Error** - NullPointerException, KeyError, etc.
-6. **Config Drift** - Missing environment variables, wrong configuration
-7. **Dependency Failure** - External service failures (Kafka, Redis, etc.)
-8. **Memory/Resource Exhaustion** - OOM errors, disk full
+Supports Anthropic, OpenAI, or any internal self-hosted model (vLLM, Ollama, TGI, etc.).
 
-## 📊 Investigation Pipeline
+```bash
+# .env
+LLM_ENABLED=true
 
-### 1. Classification (Think-First)
+# Anthropic (Claude)
+LLM_PROVIDER=anthropic
+LLM_API_KEY=sk-ant-...
+LLM_MODEL=claude-3-5-sonnet-20241022
 
-- Analyzes error messages using pattern matching
-- Returns top 3 hypotheses with confidence percentages
-- **Runs BEFORE any tool calls** (enforced by architecture)
+# OpenAI
+LLM_PROVIDER=openai
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-4o
 
-### 2. Reasoning Loop (Infra-First)
+# Custom / Internal (OpenAI-compatible endpoint)
+LLM_PROVIDER=custom
+LLM_BASE_URL=http://internal-llm.company.com/v1
+LLM_API_KEY=your-bearer-token
+LLM_MODEL=your-model-name
+```
 
-**Priority Order:**
-- **Infra categories** (DB, DNS, Cert, Network) → Check Loki logs FIRST
-- **Code categories** (Code Error, Config Drift) → Check Loki, then Git, then Jira
+Works without LLM (pattern-only mode) when `LLM_ENABLED=false`.
 
-**Stop Conditions:**
-- Confidence > 85%
-- All relevant tools called
-- Max steps (10) reached
-
-### 3. Tool Execution
-
-**Loki Log Retriever:**
-- Primary: Query by correlation_id
-- Fallback: Query by error fingerprint (when correlation_id is null)
-- Extracts: Stack traces, slow queries, key error lines
-
-**Git Blame Checker:**
-- Fetches recent commits (last 7 days)
-- Extracts Jira keys from commit messages
-- Flags high-churn files
-
-**Jira Ticket Getter:**
-- Fetches ticket details
-- Flags risks: hotfix labels, In Progress status, missing acceptance criteria
-
-### 4. Synthesis
-
-- Correlates evidence from all tools
-- Determines root cause with confidence level
-- Builds ruled-out categories list
-
-### 5. Report Generation
-
-Generates two formats:
-
-**JSON** (`reports/rca-{id}.json`): Machine-readable, complete data
-
-**Markdown** (`reports/rca-{id}.md`): Human-readable with sections:
-- Executive Summary
-- Alert Details
-- Hypothesis Ranking
-- Root Cause
-- Ruled-Out Categories
-- Code Changes
-- Log Evidence
-- Possible Fixes (prioritized)
-- Investigation Trace (full step-by-step)
-
-## 🤖 LLM Enhancement (Optional)
-
-The SRE Agent now supports **AI-powered intelligent analysis** for both classification AND synthesis!
-
-### Hybrid Intelligence
-
-- **Pattern Matching** (Fast, Free): Handles 80% of known errors
-- **LLM Classification** (Intelligent): Handles 20% of novel/complex errors when confidence < 40%
-- **LLM Synthesis** (Context-Aware): ALWAYS used for root cause analysis when enabled
-- **Cost-Optimized**: ~$0.02 per complete investigation
-
-### Setup
-
-1. Get API key from [Anthropic](https://console.anthropic.com) or [OpenAI](https://platform.openai.com)
-2. Add to `.env`:
-   ```bash
-   LLM_ENABLED=true
-   LLM_PROVIDER=anthropic
-   LLM_API_KEY=your-api-key-here
-   ```
-3. Restart application
-
-**See [LLM_ENHANCEMENT.md](LLM_ENHANCEMENT.md) for full details.**
-
-### Benefits
-
-- 📈 90% accuracy on novel errors (vs 40% pattern-only)
-- 🧠 Context-aware root cause synthesis with intelligent evidence correlation
-- 💰 ~$20 per 1,000 alerts (80% free classification, 100% LLM synthesis when enabled)
-- 🎯 Natural language explanations for stakeholders
-- ✅ Zero breaking changes (works without LLM)
-
----
-
-## ⚙️ Configuration
-
-All configuration via environment variables (see `.env.example`):
-
-### Key Settings
+## Configuration Reference
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LOKI_URL` | Required | Loki API base URL |
 | `JIRA_URL` | Required | Jira instance URL |
+| `JIRA_USERNAME` | Required | Jira username |
 | `JIRA_API_TOKEN` | Required | Jira API token |
 | `GIT_REPOS_ROOT` | `./repos` | Root directory for git repositories |
+| `REPORT_OUTPUT_DIR` | `./reports` | Directory for JSON/MD report files |
 | `CONFIDENCE_THRESHOLD` | `85.0` | Stop investigation when confidence exceeds this |
-| `REPORT_OUTPUT_DIR` | `./reports` | Where to write RCA reports |
+| `LLM_ENABLED` | `false` | Enable LLM-enhanced analysis |
+| `LLM_PROVIDER` | `anthropic` | `anthropic`, `openai`, or `custom` |
+| `LLM_API_KEY` | — | API key / bearer token |
+| `LLM_BASE_URL` | — | Base URL for custom/internal LLM |
+| `LLM_MODEL` | `claude-3-5-sonnet-20241022` | Model name |
 
-## 🧪 Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=. --cov-report=html
-
-# Run specific test file
-pytest tests/test_classifier.py -v
-```
-
-### Test Coverage
-
-- ✅ Classification engine (20+ tests)
-- ✅ All tools (25+ tests)
-- ✅ Orchestrator (11+ tests)
-- ✅ Webhook (12+ tests)
-- ✅ Contract compliance
-- ✅ Null safety verification
-
-## 🏗️ Development
-
-### Project Structure
+## Project Structure
 
 ```
 sre_agent/
-├── main.py              # FastAPI application entry point
-├── config.py            # Configuration (environment variables)
+├── main.py              # FastAPI app + dashboard route
+├── config.py            # All settings (env vars)
 ├── models/              # Pydantic models
 │   ├── alert.py
 │   ├── hypothesis.py
 │   ├── report.py
 │   └── tool_result.py
-├── api/                 # API endpoints
-│   └── webhook.py
-├── classifier/          # Failure classification
-│   ├── patterns.py
-│   └── engine.py
-├── orchestrator/        # Investigation coordination
-│   └── agent.py
-├── tools/               # Investigation tools
-│   ├── base.py
-│   ├── loki.py
-│   ├── git_blame.py
-│   └── jira.py
-├── reasoning/           # Decision-making and synthesis
-│   ├── engine.py
-│   └── synthesis.py
-├── report/              # Report generation
-│   ├── generator.py
-│   └── fixes.py
-└── tests/               # Test suite
+├── api/
+│   ├── webhook.py       # POST /webhook/alert
+│   └── dashboard.py     # Dashboard REST API
+├── classifier/
+│   ├── patterns.py      # Pattern rules for 8 categories
+│   ├── engine.py        # Pattern-based classifier
+│   └── llm_classifier.py # LLM-enhanced classifier
+├── orchestrator/
+│   └── agent.py         # Pipeline coordinator
+├── tools/
+│   ├── loki.py          # Log retrieval
+│   ├── git_blame.py     # Commit analysis
+│   └── jira.py          # Ticket fetcher
+├── reasoning/
+│   ├── engine.py        # Tool selection logic
+│   ├── synthesis.py     # Rule-based evidence synthesis
+│   └── llm_synthesis.py # LLM-powered synthesis
+├── report/
+│   ├── generator.py     # JSON + MD report writer + DB save
+│   └── fixes.py         # Prioritised fix suggestions
+├── llm/
+│   ├── client.py        # LLM client (Anthropic/OpenAI/Custom)
+│   └── prompts.py       # LLM prompt templates
+├── database/
+│   ├── models.py        # SQLAlchemy ORM models
+│   └── service.py       # DB read/write service
+├── reports/
+│   └── dashboard.html   # Dashboard web UI
+└── tests/               # 58 tests
 ```
 
-### Adding a New Failure Category
+## Testing
 
-1. Add to `FailureCategory` enum in `models/hypothesis.py`
-2. Add patterns to `PATTERN_MAP` in `classifier/patterns.py`
-3. Add tool priority in `ReasoningEngine.TOOL_PRIORITY` in `reasoning/engine.py`
-4. Add fix templates in `PossibleFixesGenerator.FIX_TEMPLATES` in `report/fixes.py`
-
-## 🔒 Security Notes
-
-- **Never commit `.env` file** (contains API tokens)
-- Use Jira API tokens (not passwords)
-- Restrict webhook endpoint access (use API gateway/firewall)
-- Sanitize log output (may contain sensitive data)
-
-## 🐛 Troubleshooting
-
-### Investigation not running
-
-Check logs:
 ```bash
-docker-compose logs -f sre-agent
+# Run all tests
+pytest tests/ -v
+
+# With coverage
+pytest tests/ --cov=. --cov-report=html
 ```
 
-Common issues:
-- Loki unreachable → Check `LOKI_URL`
-- Git repo not found → Ensure repos are in `GIT_REPOS_ROOT`
-- Jira auth failed → Verify `JIRA_API_TOKEN`
+**Test coverage: 58 tests across classifier, tools, orchestrator, and webhook.**
 
-### No reports generated
+## Security Notes
 
-- Check `REPORT_OUTPUT_DIR` permissions
-- Verify investigation completed (check logs)
-- Ensure alert payload is valid (use `/webhook/alert` endpoint)
+- Never commit `.env` (contains API tokens)
+- Use Jira API tokens, not passwords
+- Restrict `/webhook/alert` access via API gateway or firewall
+- Logs may contain sensitive error messages — sanitize as needed
 
-## 📈 Monitoring
+## Troubleshooting
 
-The application exposes metrics at:
-- `/health` - Health check
-- `/webhook/health` - Webhook health
-- `/docs` - Swagger UI (API documentation)
-
-## 🤝 Contributing
-
-Built by the autonomous engineering team:
-- **Alex** - Architecture & Integration
-- **Jordan** - Backend & Orchestration
-- **Sam** - Tool Integration
-- **Riley** - Reasoning & Reporting
-- **Morgan** - Testing & QA
-
-## 📄 License
-
-MIT License
+| Issue | Fix |
+|-------|-----|
+| Loki unreachable | Check `LOKI_URL`, verify network access |
+| Jira auth failed | Verify `JIRA_USERNAME` and `JIRA_API_TOKEN` |
+| Git repo not found | Clone service repos into `GIT_REPOS_ROOT` |
+| SSL errors | Set `ssl=False` is already applied to all HTTP calls |
+| Dashboard empty | Run `python seed_reports.py` to populate with sample data |
+| Reports not in DB | Check server logs for `saved to database` confirmation |
 
 ---
 
-**Generated by Claude Code** 🤖
+**Built with Claude Code**

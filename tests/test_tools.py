@@ -411,7 +411,7 @@ async def test_all_tools_never_raise_exceptions(mock_settings, db_connectivity_a
         assert git_result.success is False
 
     with patch.object(jira, '_fetch_tickets_batch', side_effect=Exception("Jira error")):
-        jira_result = await jira.execute(db_connectivity_alert, {"jira_keys": []})
+        jira_result = await jira.execute(db_connectivity_alert, {"jira_keys": ["PROJ-123"]})
         assert isinstance(jira_result, ToolResult)
         assert jira_result.success is False
 
