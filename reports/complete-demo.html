@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete RCA Investigation - Full Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        .content {
+            padding: 40px;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .section-title {
+            font-size: 1.8em;
+            color: #2d3748;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        .alert-box {
+            background: #fee;
+            border-left: 4px solid #c53030;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .alert-box h3 {
+            color: #c53030;
+            margin-bottom: 10px;
+        }
+        .step-box {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 20px 0;
+            border-left: 4px solid #667eea;
+        }
+        .step-number {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 40px;
+            font-weight: bold;
+            margin-right: 15px;
+            font-size: 1.2em;
+        }
+        .evidence-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        .code-block {
+            background: #1a202c;
+            color: #68d391;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 15px 0;
+        }
+        .code-block .comment {
+            color: #718096;
+        }
+        .code-block .highlight {
+            background: #2d3748;
+            color: #fbd38d;
+        }
+        .person-card {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+        }
+        .person-icon {
+            width: 60px;
+            height: 60px;
+            background: #1976d2;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            margin-right: 20px;
+            font-weight: bold;
+        }
+        .action-item {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .action-item.priority-1 {
+            background: #fee;
+            border-color: #c53030;
+        }
+        .action-item.priority-2 {
+            background: #fef3cd;
+            border-color: #ffc107;
+        }
+        .priority-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.85em;
+            margin-bottom: 10px;
+        }
+        .priority-1 .priority-badge {
+            background: #c53030;
+            color: white;
+        }
+        .priority-2 .priority-badge {
+            background: #ffc107;
+            color: #000;
+        }
+        .priority-3 .priority-badge {
+            background: #28a745;
+            color: white;
+        }
+        .timeline {
+            position: relative;
+            padding-left: 40px;
+            margin: 20px 0;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: #667eea;
+        }
+        .timeline-item {
+            position: relative;
+            padding: 15px;
+            margin-bottom: 20px;
+            background: #f7fafc;
+            border-radius: 8px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -32px;
+            top: 20px;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #667eea;
+            border: 3px solid white;
+        }
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin: 5px 5px 5px 0;
+        }
+        .badge-critical { background: #fee; color: #c53030; }
+        .badge-warning { background: #fff3cd; color: #856404; }
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-info { background: #d1ecf1; color: #0c5460; }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .table th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        .table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .table tr:hover {
+            background: #f7fafc;
+        }
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+        .checklist li {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f7fafc;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+        }
+        .checklist li::before {
+            content: '☐';
+            font-size: 1.5em;
+            margin-right: 10px;
+            color: #667eea;
+        }
+        .footer {
+            background: #2d3748;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚨 Complete RCA Investigation</h1>
+            <p style="font-size: 1.2em; margin-top: 10px;">Full Tool Integration Demo - Logs + Git + Jira</p>
+            <p style="margin-top: 10px; opacity: 0.9;">Report ID: rca-payment-service-DEMO-COMPLETE</p>
+        </div>
+
+        <div class="content">
+            <!-- Alert Section -->
+            <div class="section">
+                <div class="alert-box">
+                    <h3>🚨 Alert Received - CRITICAL</h3>
+                    <table class="table" style="background: white; margin-top: 15px;">
+                        <tr>
+                            <td><strong>Application:</strong></td>
+                            <td>payment-service</td>
+                            <td><strong>Severity:</strong></td>
+                            <td><span class="badge badge-critical">CRITICAL</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Environment:</strong></td>
+                            <td>prod</td>
+                            <td><strong>Alert Time:</strong></td>
+                            <td>2026-03-01 22:15:00 UTC</td>
+                        </tr>
+                    </table>
+                    <h4 style="margin-top: 20px; color: #c53030;">Errors Detected:</h4>
+                    <ol style="margin-left: 20px; margin-top: 10px;">
+                        <li><code>psycopg2.OperationalError: FATAL: remaining connection slots reserved</code></li>
+                        <li><code>Connection pool exhausted: all 100 connections in use</code></li>
+                        <li><code>Could not obtain connection from pool within timeout (30000ms)</code></li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Step 1: Classification -->
+            <div class="section">
+                <h2 class="section-title"><span class="step-number">1</span> Classification</h2>
+                <div class="step-box">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">Hybrid Analysis (Pattern + LLM)</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <strong>Pattern Matching:</strong>
+                            <div style="margin-top: 10px; padding: 15px; background: white; border-radius: 4px;">
+                                24.71% confidence → db_connectivity
+                                <div style="margin-top: 10px; height: 20px; background: #e2e8f0; border-radius: 10px; overflow: hidden;">
+                                    <div style="width: 24.71%; height: 100%; background: #ffc107;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <strong>LLM Enhancement:</strong>
+                            <div style="margin-top: 10px; padding: 15px; background: white; border-radius: 4px;">
+                                95% confidence (CONFIRMED)
+                                <div style="margin-top: 10px; height: 20px; background: #e2e8f0; border-radius: 10px; overflow: hidden;">
+                                    <div style="width: 95%; height: 100%; background: #28a745;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px; padding: 15px; background: #d4edda; border-radius: 4px;">
+                        <strong>✅ Final Classification:</strong> db_connectivity (95% CONFIRMED)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Tool Execution -->
+            <div class="section">
+                <h2 class="section-title"><span class="step-number">2</span> Tool Execution - Evidence Gathering</h2>
+
+                <!-- Loki Logs -->
+                <div class="evidence-card">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">📝 LOKI - Log Analysis</h3>
+                    <p><strong>Query:</strong> Retrieved logs for 3 correlation IDs (last 60 minutes)</p>
+
+                    <h4 style="margin-top: 20px; color: #c53030;">🔴 Stack Trace Found:</h4>
+                    <div class="code-block">
+2026-03-01 22:14:45 ERROR [payment-service] Correlation: pay-txn-12345
+psycopg2.OperationalError: FATAL: remaining connection slots reserved
+  at /usr/local/lib/python3.11/site-packages/psycopg2/__init__.py:127
+  at /app/payment_service/database/pool.py:45 in get_connection
+  at /app/payment_service/handlers/payment_handler.py:89 in process_payment
+
+<span class="highlight">Connection Pool Status:</span>
+  - Total connections: <span class="highlight">100</span>
+  - Active connections: <span class="highlight">100</span> ← ALL IN USE!
+  - Idle connections: <span class="highlight">0</span> ← NONE AVAILABLE!
+  - Pending requests: <span class="highlight">47</span>
+                    </div>
+
+                    <h4 style="margin-top: 20px;">📊 Key Metrics:</h4>
+                    <table class="table">
+                        <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                            <th>Normal</th>
+                            <th>Status</th>
+                        </tr>
+                        <tr>
+                            <td>Connection Errors</td>
+                            <td>47 in 10 min</td>
+                            <td>0</td>
+                            <td><span class="badge badge-critical">CRITICAL</span></td>
+                        </tr>
+                        <tr>
+                            <td>Pool Utilization</td>
+                            <td>100%</td>
+                            <td>&lt; 70%</td>
+                            <td><span class="badge badge-critical">CRITICAL</span></td>
+                        </tr>
+                        <tr>
+                            <td>Avg Connection Hold</td>
+                            <td>8.5 seconds</td>
+                            <td>2 seconds</td>
+                            <td><span class="badge badge-warning">HIGH</span></td>
+                        </tr>
+                        <tr>
+                            <td>Peak Requests</td>
+                            <td>145 concurrent</td>
+                            <td>100 pool size</td>
+                            <td><span class="badge badge-critical">OVER CAPACITY</span></td>
+                        </tr>
+                    </table>
+
+                    <h4 style="margin-top: 20px;">🐌 Slow Query Detected:</h4>
+                    <div class="code-block">
+<span class="comment">-- Query ID: q_payment_validation</span>
+<span class="comment">-- Duration: <span class="highlight">3,450ms</span> (threshold: 1,000ms)</span>
+SELECT p.*, c.*, a.*
+FROM payments p
+JOIN customers c ON p.customer_id = c.id
+JOIN accounts a ON c.account_id = a.id
+WHERE p.status = 'pending'  <span class="highlight">← Missing index!</span>
+ORDER BY p.created_at DESC;
+                    </div>
+                </div>
+
+                <!-- Git Changes -->
+                <div class="evidence-card" style="margin-top: 30px;">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">💻 GIT - Code Change Analysis</h3>
+                    <p><strong>Query:</strong> Recent commits in payment-service (last 7 days)</p>
+
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <strong>Commit: 9d9bd1a</strong> (Feb 28, 15:00 UTC)
+                            <div style="margin-top: 10px;">
+                                <span class="badge badge-info">Jane Developer</span>
+                                <span class="badge badge-warning">INFRA-456</span>
+                            </div>
+                            <p style="margin-top: 10px;"><strong>Message:</strong> Update config to reflect new pool size</p>
+                            <div class="code-block" style="margin-top: 10px;">
+<span class="comment">// config.yaml</span>
++ database:
++   pool_size: <span class="highlight">100</span>        <span class="comment">← Changed from 50</span>
++   max_connections: <span class="highlight">100</span>  <span class="comment">← Changed from 50</span>
+                            </div>
+                        </div>
+
+                        <div class="timeline-item">
+                            <strong>Commit: c3ba46d</strong> (Feb 28, 14:30 UTC)
+                            <div style="margin-top: 10px;">
+                                <span class="badge badge-info">Jane Developer</span>
+                                <span class="badge badge-critical">HIGH CHURN</span>
+                                <span class="badge badge-warning">INFRA-456</span>
+                            </div>
+                            <p style="margin-top: 10px;"><strong>Message:</strong> Increase database connection pool from 50 to 100</p>
+                            <div class="code-block" style="margin-top: 10px;">
+<span class="comment">// PaymentService.java (modified 8x in last 7 days)</span>
+- this.pool = new DatabaseConnectionPool(50);
++ this.pool = new DatabaseConnectionPool(<span class="highlight">100</span>);  <span class="comment">← INFRA-456</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="background: #fff3cd; padding: 15px; border-radius: 4px; margin-top: 20px;">
+                        <strong>⚠️ Analysis:</strong> Pool size increased 2 days before incident, but same issue recurring!
+                    </div>
+                </div>
+
+                <!-- Jira Tickets -->
+                <div class="evidence-card" style="margin-top: 30px;">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">🎫 JIRA - Ticket Analysis</h3>
+
+                    <div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding: 25px; border-radius: 8px;">
+                        <h3 style="color: #1976d2;">INFRA-456: Increase DB Connection Pool</h3>
+                        <div style="margin-top: 15px;">
+                            <span class="badge badge-success">Done</span>
+                            <span class="badge badge-critical">High Priority</span>
+                            <span class="badge badge-warning">Hotfix</span>
+                        </div>
+
+                        <table style="width: 100%; margin-top: 20px; background: white; border-radius: 4px;">
+                            <tr>
+                                <td style="padding: 10px;"><strong>Created:</strong></td>
+                                <td style="padding: 10px;">2026-02-27</td>
+                                <td style="padding: 10px;"><strong>Completed:</strong></td>
+                                <td style="padding: 10px;">2026-02-28</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 10px;"><strong>Assignee:</strong></td>
+                                <td style="padding: 10px;">Jane Developer</td>
+                                <td style="padding: 10px;"><strong>Reporter:</strong></td>
+                                <td style="padding: 10px;">Mike (Manager)</td>
+                            </tr>
+                        </table>
+
+                        <h4 style="margin-top: 20px; color: #1976d2;">Acceptance Criteria:</h4>
+                        <ul style="margin-left: 20px; margin-top: 10px; background: white; padding: 15px; border-radius: 4px;">
+                            <li>✅ Update connection pool configuration</li>
+                            <li>❌ <span style="color: #c53030;">Test in staging environment - SKIPPED!</span></li>
+                            <li>❌ <span style="color: #c53030;">Monitor metrics for 48 hours - NOT DONE!</span></li>
+                            <li>❌ <span style="color: #c53030;">Document rollback procedure - MISSING!</span></li>
+                        </ul>
+
+                        <div style="background: #fee; padding: 15px; border-radius: 4px; margin-top: 20px;">
+                            <strong>🚩 Risk Flags:</strong>
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>3 out of 4 acceptance criteria NOT completed</li>
+                                <li>No staging environment testing</li>
+                                <li>Opened and closed same day (rushed)</li>
+                                <li>SRE concerns ignored (Sarah asked about staging tests)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Who Did What -->
+            <div class="section">
+                <h2 class="section-title"><span class="step-number">3</span> Who Did What?</h2>
+
+                <div class="person-card">
+                    <div class="person-icon">JD</div>
+                    <div style="flex: 1;">
+                        <h3 style="color: #1976d2;">Jane Developer</h3>
+                        <p><strong>Role:</strong> Backend Engineer</p>
+                        <p style="margin-top: 10px;"><strong>Actions:</strong></p>
+                        <ul style="margin-left: 20px;">
+                            <li>Modified PaymentService.java (pool: 50 → 100)</li>
+                            <li>Updated config.yaml</li>
+                            <li>Deployed to production Feb 28</li>
+                        </ul>
+                        <p style="margin-top: 10px; color: #c53030;"><strong>⚠️ Issues:</strong> Skipped staging tests, didn't address slow queries</p>
+                    </div>
+                </div>
+
+                <div class="person-card">
+                    <div class="person-icon" style="background: #f57c00;">M</div>
+                    <div style="flex: 1;">
+                        <h3 style="color: #1976d2;">Mike</h3>
+                        <p><strong>Role:</strong> Engineering Manager</p>
+                        <p style="margin-top: 10px;"><strong>Actions:</strong></p>
+                        <ul style="margin-left: 20px;">
+                            <li>Reported original issue</li>
+                            <li>Approved fast-track deployment</li>
+                        </ul>
+                        <p style="margin-top: 10px; color: #c53030;"><strong>⚠️ Issues:</strong> Didn't enforce staging test requirement</p>
+                    </div>
+                </div>
+
+                <div class="person-card">
+                    <div class="person-icon" style="background: #28a745;">S</div>
+                    <div style="flex: 1;">
+                        <h3 style="color: #1976d2;">Sarah (SRE Team)</h3>
+                        <p><strong>Role:</strong> Site Reliability Engineer</p>
+                        <p style="margin-top: 10px;"><strong>Actions:</strong></p>
+                        <ul style="margin-left: 20px;">
+                            <li>Raised concern about staging tests</li>
+                            <li>Comment not addressed by team</li>
+                        </ul>
+                        <p style="margin-top: 10px; color: #28a745;"><strong>✅ Good:</strong> Identified risk before deployment</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Developer Action Plan -->
+            <div class="section">
+                <h2 class="section-title"><span class="step-number">4</span> Developer Next Steps</h2>
+
+                <div class="action-item priority-1">
+                    <span class="priority-badge">PRIORITY 1 - IMMEDIATE</span>
+                    <h3 style="color: #c53030; margin: 10px 0;">Rollback deployment (Jane Developer - 30 min)</h3>
+                    <div class="code-block">
+<span class="comment"># Revert the problematic commits</span>
+git revert c3ba46d 9d9bd1a
+git push origin main
+
+<span class="comment"># OR quick config change</span>
+kubectl set env deployment/payment-service DATABASE_POOL_SIZE=50
+                    </div>
+                    <p><strong>Why:</strong> Return to stable state while investigating</p>
+                    <p><strong>Impact:</strong> Immediate stability restoration</p>
+                </div>
+
+                <div class="action-item priority-2">
+                    <span class="priority-badge">PRIORITY 2 - TODAY (4 hours)</span>
+                    <h3 style="margin: 10px 0;">Fix slow query - Add database index (DBA Team)</h3>
+                    <div class="code-block">
+<span class="comment">-- Run on production database (off-peak hours)</span>
+CREATE INDEX CONCURRENTLY idx_payments_status
+ON payments(status);
+
+<span class="comment">-- Verify query performance</span>
+EXPLAIN ANALYZE
+SELECT * FROM payments WHERE status = 'pending';
+                    </div>
+                    <p><strong>Why:</strong> Reduce query time from 3.5s → &lt;100ms</p>
+                    <p><strong>Impact:</strong> 95% reduction in connection hold time</p>
+                </div>
+
+                <div class="action-item priority-2">
+                    <span class="priority-badge">PRIORITY 2 - TODAY (6 hours)</span>
+                    <h3 style="margin: 10px 0;">Implement connection timeout (Jane Developer)</h3>
+                    <div class="code-block">
+<span class="comment">// PaymentService.java</span>
+public PaymentService() {
+    this.pool = new DatabaseConnectionPool(
+        50,  <span class="comment">// pool_size (revert to original)</span>
+        30,  <span class="comment">// connection_timeout_seconds (NEW)</span>
+        5    <span class="comment">// max_connection_lifetime_minutes (NEW)</span>
+    );
+}
+                    </div>
+                    <p><strong>Why:</strong> Prevent connections being held indefinitely</p>
+                    <p><strong>Impact:</strong> Automatic connection cleanup</p>
+                </div>
+
+                <div class="action-item priority-3">
+                    <span class="priority-badge">PRIORITY 3 - THIS WEEK</span>
+                    <h3 style="margin: 10px 0;">Set up monitoring & alerts (SRE Team - Sarah)</h3>
+                    <ul class="checklist">
+                        <li>Database pool utilization alerts (&gt;80%)</li>
+                        <li>Slow query detection (&gt;1 second)</li>
+                        <li>Connection wait time monitoring</li>
+                        <li>Create runbook for connection pool incidents</li>
+                        <li>Update deployment policies</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Lessons Learned -->
+            <div class="section">
+                <h2 class="section-title">🎓 Lessons Learned</h2>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div style="background: #fee; padding: 20px; border-radius: 8px;">
+                        <h3 style="color: #c53030;">❌ What Went Wrong:</h3>
+                        <ul style="margin-left: 20px; margin-top: 10px;">
+                            <li>Skipped staging environment testing</li>
+                            <li>Treated symptom (pool size) not root cause (slow queries)</li>
+                            <li>Incomplete acceptance criteria</li>
+                            <li>No rollback plan</li>
+                            <li>SRE concerns ignored</li>
+                        </ul>
+                    </div>
+                    <div style="background: #d4edda; padding: 20px; border-radius: 8px;">
+                        <h3 style="color: #28a745;">✅ Next Time:</h3>
+                        <ul style="margin-left: 20px; margin-top: 10px;">
+                            <li>Always test in staging with realistic load</li>
+                            <li>Investigate WHY before changing HOW MANY</li>
+                            <li>Enforce complete acceptance criteria</li>
+                            <li>Document rollback before deployment</li>
+                            <li>Listen to SRE concerns</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary -->
+            <div class="section">
+                <h2 class="section-title">📊 Investigation Summary</h2>
+                <div class="step-box">
+                    <h3 style="color: #667eea;">Tool Integration Success:</h3>
+                    <table class="table">
+                        <tr>
+                            <th>Tool</th>
+                            <th>Evidence Found</th>
+                            <th>Key Insight</th>
+                        </tr>
+                        <tr>
+                            <td><strong>LOKI (Logs)</strong></td>
+                            <td>Stack traces, slow queries, pool metrics</td>
+                            <td>All 100 connections exhausted + 3.5s queries</td>
+                        </tr>
+                        <tr>
+                            <td><strong>GIT (Commits)</strong></td>
+                            <td>2 commits by Jane Developer, 2 days ago</td>
+                            <td>Pool increased 50→100 but same problem recurring</td>
+                        </tr>
+                        <tr>
+                            <td><strong>JIRA (Tickets)</strong></td>
+                            <td>INFRA-456: Incomplete acceptance criteria</td>
+                            <td>Rushed deployment, skipped testing, ignored SRE</td>
+                        </tr>
+                    </table>
+
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                        <h3>🎯 Root Cause:</h3>
+                        <p style="font-size: 1.1em; margin-top: 10px;">
+                            Connection pool size increase (50→100) didn't solve the real problem: slow database queries (3.5s)
+                            holding connections too long. Missing index on payments.status causing table scans.
+                            Rushed deployment without proper testing led to recurrence at higher capacity.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p style="font-size: 1.3em; font-weight: bold;">🤖 SRE Agent - Complete Investigation Demo</p>
+            <p style="margin-top: 15px;">This demonstrates full integration of Logs + Git + Jira analysis</p>
+            <p style="margin-top: 10px; opacity: 0.8;">Powered by Claude Code with LLM-Enhanced Intelligence</p>
+            <p style="margin-top: 20px;">
+                <a href="index.html" style="color: white; margin: 0 15px;">← Back to Dashboard</a>
+                <a href="COMPLETE_INVESTIGATION_DEMO.md" style="color: white; margin: 0 15px;">View Markdown</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

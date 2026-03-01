@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SRE Agent Dashboard - RCA Reports</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #2d3748;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 1.1em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card h3 {
+            color: #718096;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .filters h3 {
+            margin-bottom: 15px;
+            color: #2d3748;
+        }
+
+        .filter-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            margin-bottom: 5px;
+            color: #4a5568;
+            font-size: 0.9em;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #38a169;
+        }
+
+        .reports-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .reports-section h2 {
+            color: #2d3748;
+            margin-bottom: 20px;
+        }
+
+        .report-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .report-item:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .report-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .severity-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .severity-critical {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .severity-high {
+            background: #feebc8;
+            color: #c05621;
+        }
+
+        .severity-medium {
+            background: #fefcbf;
+            color: #975a16;
+        }
+
+        .report-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.9em;
+            color: #4a5568;
+        }
+
+        .meta-label {
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .category-badge {
+            background: #e6fffa;
+            color: #234e52;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+        }
+
+        .confidence-bar {
+            width: 100%;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: #48bb78;
+            transition: width 0.5s;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .breakdown-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .breakdown-item {
+            background: #f7fafc;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .breakdown-label {
+            font-size: 0.85em;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+
+        .breakdown-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-box input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #4a5568;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 SRE Agent Dashboard</h1>
+            <p class="subtitle">Smart Root Cause Analysis Reports</p>
+        </header>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="loading">Loading statistics...</div>
+        </div>
+
+        <div class="filters">
+            <h3>Filters</h3>
+            <div class="filter-controls">
+                <div class="filter-group">
+                    <label>Application</label>
+                    <select id="filterApp">
+                        <option value="">All Applications</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Severity</label>
+                    <select id="filterSeverity">
+                        <option value="">All Severities</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Environment</label>
+                    <select id="filterEnvironment">
+                        <option value="">All Environments</option>
+                        <option value="prod">Production</option>
+                        <option value="staging">Staging</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Category</label>
+                    <select id="filterCategory">
+                        <option value="">All Categories</option>
+                        <option value="db_connectivity">DB Connectivity</option>
+                        <option value="network">Network</option>
+                        <option value="code_logic_error">Code Logic Error</option>
+                        <option value="resource_exhaustion">Resource Exhaustion</option>
+                        <option value="third_party_api">Third Party API</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Last N Days</label>
+                    <select id="filterDays">
+                        <option value="">All Time</option>
+                        <option value="1">Last 24 hours</option>
+                        <option value="7">Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <button class="btn btn-primary" onclick="applyFilters()">Apply Filters</button>
+                <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+            </div>
+        </div>
+
+        <div class="reports-section">
+            <h2>Recent Investigations</h2>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search by error message...">
+                <button class="btn btn-primary" onclick="searchReports()">Search</button>
+            </div>
+            <div id="reportsContainer">
+                <div class="loading">Loading reports...</div>
+            </div>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let currentPage = 0;
+        const pageSize = 10;
+
+        // Load dashboard on page load
+        window.onload = () => {
+            loadStatistics();
+            loadApps();
+            loadReports();
+        };
+
+        async function loadStatistics() {
+            try {
+                const response = await fetch(`${API_BASE}/dashboard/stats`);
+                const stats = await response.json();
+                renderStatistics(stats);
+            } catch (error) {
+                console.error('Failed to load statistics:', error);
+                document.getElementById('statsGrid').innerHTML =
+                    '<div class="error">Failed to load statistics. Make sure the API is running.</div>';
+            }
+        }
+
+        function renderStatistics(stats) {
+            const grid = document.getElementById('statsGrid');
+
+            let severityBreakdown = '';
+            for (const [sev, count] of Object.entries(stats.severity_breakdown || {})) {
+                severityBreakdown += `
+                    <div class="breakdown-item">
+                        <div class="breakdown-label">${sev}</div>
+                        <div class="breakdown-value">${count}</div>
+                    </div>
+                `;
+            }
+
+            let categoryBreakdown = '';
+            for (const [cat, count] of Object.entries(stats.category_breakdown || {})) {
+                categoryBreakdown += `
+                    <div class="breakdown-item">
+                        <div class="breakdown-label">${cat.replace(/_/g, ' ')}</div>
+                        <div class="breakdown-value">${count}</div>
+                    </div>
+                `;
+            }
+
+            grid.innerHTML = `
+                <div class="stat-card">
+                    <h3>Total Investigations</h3>
+                    <div class="stat-value">${stats.total_investigations || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Code Changes Involved</h3>
+                    <div class="stat-value">${stats.code_changes_involved || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Last 24 Hours</h3>
+                    <div class="stat-value">${stats.recent_24h || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Severity Breakdown</h3>
+                    <div class="breakdown-grid">${severityBreakdown || '<p style="color: #718096;">No data</p>'}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Top Applications</h3>
+                    ${(stats.top_apps || []).slice(0, 3).map(app =>
+                        `<div style="margin: 5px 0; color: #4a5568;">${app.app}: <strong>${app.count}</strong></div>`
+                    ).join('') || '<p style="color: #718096;">No data</p>'}
+                </div>
+                <div class="stat-card">
+                    <h3>Category Breakdown</h3>
+                    <div class="breakdown-grid">${categoryBreakdown || '<p style="color: #718096;">No data</p>'}</div>
+                </div>
+            `;
+        }
+
+        async function loadApps() {
+            try {
+                const response = await fetch(`${API_BASE}/dashboard/apps`);
+                const data = await response.json();
+                const select = document.getElementById('filterApp');
+                data.apps.forEach(app => {
+                    const option = document.createElement('option');
+                    option.value = app;
+                    option.textContent = app;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load apps:', error);
+            }
+        }
+
+        async function loadReports(filters = {}) {
+            const container = document.getElementById('reportsContainer');
+            container.innerHTML = '<div class="loading">Loading reports...</div>';
+
+            try {
+                const params = new URLSearchParams({
+                    limit: pageSize,
+                    offset: currentPage * pageSize,
+                    ...filters
+                });
+
+                const response = await fetch(`${API_BASE}/dashboard/reports?${params}`);
+                const data = await response.json();
+
+                if (data.reports && data.reports.length > 0) {
+                    renderReports(data.reports);
+                    renderPagination(data.total);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No Reports Found</h3>
+                            <p>Try adjusting your filters or send some test alerts.</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to load reports:', error);
+                container.innerHTML = '<div class="error">Failed to load reports. Make sure the API is running.</div>';
+            }
+        }
+
+        function renderReports(reports) {
+            const container = document.getElementById('reportsContainer');
+            container.innerHTML = reports.map(report => `
+                <div class="report-item" onclick="viewReport('${report.id}')">
+                    <div class="report-header">
+                        <div class="report-title">${report.app_name}</div>
+                        <span class="severity-badge severity-${report.severity}">${report.severity.toUpperCase()}</span>
+                    </div>
+                    <div class="report-meta">
+                        <div class="meta-item">
+                            <span class="meta-label">Environment:</span>
+                            ${report.environment}
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Alert Time:</span>
+                            ${new Date(report.alert_time).toLocaleString()}
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Category:</span>
+                            <span class="category-badge">${report.root_cause_category.replace(/_/g, ' ')}</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Confidence:</span>
+                            ${report.confidence_level} (${report.confidence_percentage}%)
+                        </div>
+                    </div>
+                    <div class="report-meta">
+                        <div class="meta-item">
+                            <span class="meta-label">Errors:</span>
+                            ${report.error_count}
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Investigation Steps:</span>
+                            ${report.step_count}
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Code Changes:</span>
+                            ${report.code_change_count}
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Code Change Involved:</span>
+                            ${report.is_code_change ? 'Yes' : 'No'}
+                        </div>
+                    </div>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill" style="width: ${report.confidence_percentage}%"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderPagination(total) {
+            const pagination = document.getElementById('pagination');
+            const totalPages = Math.ceil(total / pageSize);
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            if (currentPage > 0) {
+                html += `<button class="btn btn-primary" onclick="changePage(${currentPage - 1})">Previous</button>`;
+            }
+
+            html += `<span>Page ${currentPage + 1} of ${totalPages}</span>`;
+
+            if (currentPage < totalPages - 1) {
+                html += `<button class="btn btn-primary" onclick="changePage(${currentPage + 1})">Next</button>`;
+            }
+
+            pagination.innerHTML = html;
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const filters = {};
+
+            const app = document.getElementById('filterApp').value;
+            if (app) filters.app_name = app;
+
+            const severity = document.getElementById('filterSeverity').value;
+            if (severity) filters.severity = severity;
+
+            const environment = document.getElementById('filterEnvironment').value;
+            if (environment) filters.environment = environment;
+
+            const category = document.getElementById('filterCategory').value;
+            if (category) filters.category = category;
+
+            const days = document.getElementById('filterDays').value;
+            if (days) filters.days = days;
+
+            loadReports(filters);
+        }
+
+        function resetFilters() {
+            document.getElementById('filterApp').value = '';
+            document.getElementById('filterSeverity').value = '';
+            document.getElementById('filterEnvironment').value = '';
+            document.getElementById('filterCategory').value = '';
+            document.getElementById('filterDays').value = '';
+            currentPage = 0;
+            loadReports();
+        }
+
+        async function searchReports() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query || query.length < 3) {
+                alert('Please enter at least 3 characters to search');
+                return;
+            }
+
+            const container = document.getElementById('reportsContainer');
+            container.innerHTML = '<div class="loading">Searching...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/dashboard/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                if (data.reports && data.reports.length > 0) {
+                    renderReports(data.reports);
+                    document.getElementById('pagination').innerHTML = `<p>Found ${data.count} results for "${query}"</p>`;
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No Results Found</h3>
+                            <p>No reports found matching "${query}"</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Search failed:', error);
+                container.innerHTML = '<div class="error">Search failed. Please try again.</div>';
+            }
+        }
+
+        function viewReport(reportId) {
+            window.open(`http://localhost:8000/docs#/dashboard/get_report_dashboard_reports__report_id__get`, '_blank');
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            loadStatistics();
+            applyFilters();
+        }, 30000);
+    </script>
+</body>
+</html>

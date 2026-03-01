@@ -23,6 +23,14 @@ from models.report import (
 )
 from config import Settings
 
+# Database service for storing reports
+try:
+    from database.service import ReportDatabaseService
+    DB_AVAILABLE = True
+except ImportError:
+    DB_AVAILABLE = False
+    logger.warning("Database service not available. Reports will only be saved to files.")
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,6 +47,17 @@ class ReportGenerator:
         self.settings = settings
         self.output_dir = Path(settings.REPORT_OUTPUT_DIR)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize database service if available
+        if DB_AVAILABLE:
+            try:
+                self.db_service = ReportDatabaseService()
+                logger.info("Database service initialized for report storage")
+            except Exception as e:
+                logger.warning(f"Failed to initialize database service: {e}")
+                self.db_service = None
+        else:
+            self.db_service = None
 
     def generate(self, report: RCAReport) -> tuple[Path, Path]:
         """
@@ -62,6 +81,17 @@ class ReportGenerator:
 
         # Write Markdown report
         self._write_markdown_report(report, md_path)
+
+        # Save to database if available
+        if self.db_service:
+            try:
+                success = self.db_service.save_report(report)
+                if success:
+                    logger.info(f"Report {report.report_id} saved to database")
+                else:
+                    logger.warning(f"Failed to save report {report.report_id} to database")
+            except Exception as e:
+                logger.error(f"Error saving report to database: {e}", exc_info=True)
 
         logger.info(f"Reports generated: {json_path} and {md_path}")
 

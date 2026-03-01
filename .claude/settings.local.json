@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(./venv/bin/python:*)",
+      "Bash(curl:*)",
+      "Bash(PaymentService.java:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(requirements.txt:*)",
+      "Bash(./venv/bin/pip install:*)"
+    ]
+  }
+}

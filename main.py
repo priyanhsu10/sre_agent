@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.webhook import router as webhook_router
+from api.dashboard import router as dashboard_router
 from config import settings
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -60,6 +61,7 @@ app.add_middleware(
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 app.include_router(webhook_router)
+app.include_router(dashboard_router)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ROOT ENDPOINT
@@ -75,6 +77,8 @@ async def root():
         "endpoints": {
             "webhook": "/webhook/alert (POST)",
             "health": "/webhook/health (GET)",
+            "dashboard_stats": "/dashboard/stats (GET)",
+            "dashboard_reports": "/dashboard/reports (GET)",
             "docs": "/docs",
         },
         "status": "operational"
