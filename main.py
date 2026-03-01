@@ -78,6 +78,12 @@ async def dashboard_ui():
     return RedirectResponse(url="/static/dashboard.html")
 
 
+@app.get("/report/{report_id}", tags=["dashboard"], include_in_schema=False)
+async def view_report(report_id: str):
+    """Direct shareable link for a specific RCA report — opens dashboard with report in fullscreen."""
+    return RedirectResponse(url=f"/static/dashboard.html?report={report_id}")
+
+
 @app.get("/", tags=["root"])
 async def root():
     """Root endpoint with service information"""
