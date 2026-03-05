@@ -1,19 +1,21 @@
 # SRE Agent - Smart Root Cause Analyser
 
-An autonomous pipeline that receives production alerts, classifies failures, investigates root causes using logs/git/Jira, and generates comprehensive RCA reports with a live web dashboard.
+An autonomous pipeline that receives production alerts, classifies failures, investigates root causes using logs/git/Jira, generates comprehensive RCA reports, and automatically applies code fixes with a live web dashboard.
 
 ## Features
 
+- **Alert Deduplication**: SHA-256 content fingerprinting suppresses duplicate alerts within a configurable window
 - **LLM-Enhanced Classification**: Hybrid AI + rule-based analysis for novel errors
 - **LLM-Enhanced Synthesis**: AI-powered root cause analysis with intelligent evidence correlation
 - **8 Failure Categories**: DB, DNS, Certificate, Network, Code, Config, Dependency, Memory
 - **Think-First Protocol**: Always classifies before investigating (prevents wasted tool calls)
 - **Multi-Tool Investigation**: Loki (logs), Git (commits), Jira (tickets)
-- **Null-Safe**: Handles missing correlation IDs with intelligent fingerprint fallback
-- **Live Dashboard**: Web UI with charts, filters, auto-refresh, and rich RCA report modals
+- **Automated Code Fix**: Detects runtime, creates branch, applies git revert or Claude agent patch, runs tests, pushes branch
+- **Claude Agentic Loop**: Multi-turn tool-use loop for high-quality code patches (read → fix → test → iterate)
+- **Graceful Fallback**: When Claude unavailable, creates `FIX_INSTRUCTIONS.md` on branch with full manual steps
+- **Live Dashboard**: Web UI with charts, filters, RCA modals, and one-click "Apply Fix" button
 - **DB Persistence**: All reports saved to SQLite, queryable via REST API
 - **Custom LLM Provider**: Supports Anthropic, OpenAI, or any internal self-hosted model
-- **SSL Bypass**: Works in internal environments with self-signed certificates
 
 ## Architecture
 
@@ -21,6 +23,7 @@ An autonomous pipeline that receives production alerts, classifies failures, inv
 ┌─────────────┐
 │   Webhook   │  POST /webhook/alert → 202 Accepted
 └──────┬──────┘
+       │ dedup check → suppress if duplicate
        │ background task
        ▼
 ┌─────────────────┐
@@ -50,6 +53,16 @@ An autonomous pipeline that receives production alerts, classifies failures, inv
 ┌─────────────────┐
 │  Report Gen     │  JSON + Markdown files + SQLite DB
 └──────┬──────────┘
+       │ auto-trigger if code fix identified
+       ▼
+┌─────────────────────────────────────┐
+│  Remediation Pipeline               │
+│  1. Detect runtime (Python/Java/JS) │
+│  2. Create fix branch               │
+│  3. Apply revert or Claude patch    │
+│  4. Run tests                       │
+│  5. Push branch                     │
+└──────┬──────────────────────────────┘
        │
        ▼
 ┌─────────────────┐
@@ -64,7 +77,7 @@ An autonomous pipeline that receives production alerts, classifies failures, inv
 - Python 3.11+
 - Loki instance
 - Jira instance + API token
-- Git repositories for your services
+- Git repositories for your services (cloned into `GIT_REPOS_ROOT`)
 
 ### Installation
 
@@ -83,10 +96,10 @@ cp .env.example .env
 ### Run
 
 ```bash
-python main.py
-# or
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+Open **http://localhost:8000** — redirects to the dashboard automatically.
 
 ### Docker
 
@@ -130,39 +143,57 @@ curl -X POST http://localhost:8000/webhook/alert \
 }
 ```
 
+**Duplicate alert response (200):**
+```json
+{
+  "status": "duplicate",
+  "investigation_id": "rca-payment-service-1709294130",
+  "message": "Duplicate alert detected. Investigation already in_progress.",
+  "existing_status": "in_progress"
+}
+```
+
 Investigation runs in the background (~5-10s). Report is saved to DB and `./reports/`.
 
 ### Dashboard
 
 ```
-http://localhost:8000/dashboard-ui
+http://localhost:8000
 ```
 
 - Overview stats + charts (severity donut, category bar)
 - Filter by app, severity, environment, category, time range
-- Search by app name
 - Click any report to view full RCA details (root cause, evidence, fixes, trace)
+- **"Apply Automated Fix"** button in the Developer Action Plan section for fixable reports
 - Auto-refreshes every 30 seconds
+
+### Trigger Fix Manually
+
+```bash
+# Trigger remediation for an existing report
+POST /remediation/{report_id}
+
+# Poll status
+GET /remediation/{report_id}
+```
+
+**Status values:** `pending` → `branch_created` → `fix_applied` → `tests_running` → `tests_passed` → `pushed`
 
 ### Dashboard API
 
 ```bash
-# List reports
 GET /dashboard/reports?limit=10&offset=0&severity=critical&environment=prod
-
-# Get single report
 GET /dashboard/reports/{report_id}
-
-# Stats
 GET /dashboard/stats
 ```
 
 ### Other Endpoints
 
 ```bash
-GET /health          # App health
-GET /webhook/health  # Webhook health
-GET /docs            # Swagger UI
+GET /             # Redirects to dashboard
+GET /health       # App health
+GET /webhook/health  # Webhook health + dedup stats
+GET /docs         # Swagger UI
 ```
 
 ## Alert Payload
@@ -195,18 +226,71 @@ GET /docs            # Swagger UI
 | `dependency_failure` | Kafka, Redis, S3 unreachable |
 | `memory_resource_exhaustion` | OOMKilled, heap full, disk full |
 
+## Alert Deduplication
+
+Same alert firing repeatedly is suppressed automatically.
+
+**Fingerprint** = SHA-256 of `app_name + environment + sorted(error_messages)` — `alert_time` is excluded so retries with new timestamps are still caught.
+
+| State | Behaviour |
+|-------|-----------|
+| `in_progress` | Always suppressed — returns existing investigation ID |
+| `completed` | Suppressed within `DEDUP_WINDOW_MINUTES` (default 30 min) |
+| `failed` | Allowed through — retry is permitted |
+
+## Automated Code Fix (Remediation)
+
+Triggered automatically after RCA when a code fix is identified, or manually via `POST /remediation/{report_id}`.
+
+### Fix Types
+
+| Condition | Fix Type | What Happens |
+|-----------|----------|-------------|
+| `is_code_change=true` + Priority 1 fix says "Revert commit..." | `revert` | `git revert {commit_hash}`, run tests, push |
+| `root_cause_category=code_logic_error` + Claude available | `claude_agent_patch` | Multi-turn Claude loop reads files, writes fix, runs tests, iterates |
+| `root_cause_category=code_logic_error` + Claude unavailable | `manual_instructions` | Creates `FIX_INSTRUCTIONS.md` on branch with full RCA context |
+| Other categories | `none` | No automated fix |
+
+### Runtime Auto-Detection
+
+The agent detects how to run tests from the repo contents:
+
+| File present | Runtime | Test command |
+|---|---|---|
+| `pom.xml` + `mvnw` | spring_boot | `./mvnw test -B` |
+| `build.gradle` + `gradlew` | spring_boot | `./gradlew test` |
+| `package.json` | react | `npm test -- --watchAll=false` |
+| `requirements.txt` / `pytest.ini` | python | `python -m pytest` |
+| fallback | unknown | `make test` |
+
+### Claude Agentic Loop
+
+When `fix_type=claude_agent_patch`, Claude runs a multi-turn conversation with tools:
+
+```
+Iteration 1:  Claude → calls read_file("src/order_validator.py")
+              You    → return file contents
+Iteration 2:  Claude → calls write_file("src/order_validator.py", fixed_code)
+              You    → write file, return "OK"
+Iteration 3:  Claude → calls run_tests()
+              You    → run pytest, return output
+Iteration 4:  If tests pass → Claude stops
+              If tests fail → Claude reads failure, refines fix, repeats
+Max 5 iterations.
+```
+
 ## LLM Configuration
 
 Supports Anthropic, OpenAI, or any internal self-hosted model (vLLM, Ollama, TGI, etc.).
 
 ```bash
 # .env
-LLM_ENABLED=true
 
-# Anthropic (Claude)
+# Anthropic (Claude) — used for both classification and code fix agent
+LLM_ENABLED=true
 LLM_PROVIDER=anthropic
 LLM_API_KEY=sk-ant-...
-LLM_MODEL=claude-3-5-sonnet-20241022
+LLM_MODEL=claude-sonnet-4-6
 
 # OpenAI
 LLM_PROVIDER=openai
@@ -220,85 +304,109 @@ LLM_API_KEY=your-bearer-token
 LLM_MODEL=your-model-name
 ```
 
-Works without LLM (pattern-only mode) when `LLM_ENABLED=false`.
+Works without LLM (`LLM_ENABLED=false`) — falls back to pattern-only classification and manual fix instructions.
 
 ## Configuration Reference
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LOKI_URL` | Required | Loki API base URL |
+| `LOKI_URL` | `http://localhost:3100` | Loki API base URL |
 | `JIRA_URL` | Required | Jira instance URL |
 | `JIRA_USERNAME` | Required | Jira username |
 | `JIRA_API_TOKEN` | Required | Jira API token |
-| `GIT_REPOS_ROOT` | `./repos` | Root directory for git repositories |
+| `GIT_REPOS_ROOT` | `./repos` | Root dir for app git repositories |
 | `REPORT_OUTPUT_DIR` | `./reports` | Directory for JSON/MD report files |
 | `CONFIDENCE_THRESHOLD` | `85.0` | Stop investigation when confidence exceeds this |
+| `DEDUP_WINDOW_MINUTES` | `30` | Suppress duplicate alerts within this window |
 | `LLM_ENABLED` | `false` | Enable LLM-enhanced analysis |
 | `LLM_PROVIDER` | `anthropic` | `anthropic`, `openai`, or `custom` |
 | `LLM_API_KEY` | — | API key / bearer token |
-| `LLM_BASE_URL` | — | Base URL for custom/internal LLM |
-| `LLM_MODEL` | `claude-3-5-sonnet-20241022` | Model name |
+| `LLM_MODEL` | `claude-sonnet-4-6` | Model name |
+| `LLM_CONFIDENCE_THRESHOLD` | `40.0` | Use LLM only if pattern confidence < this |
+| `AUTO_REMEDIATION_ENABLED` | `true` | Auto-trigger fix after RCA |
+| `AUTO_REMEDIATION_MIN_CONFIDENCE` | `High` | Min confidence to auto-remediate |
+| `REMEDIATION_BRANCH_PREFIX` | `fix/rca` | Git branch prefix for fix branches |
+| `REMEDIATION_REMOTE` | `origin` | Git remote to push fix branches to |
+| `REMEDIATION_TEST_TIMEOUT_SECONDS` | `300` | Max seconds to wait for tests |
+| `REMEDIATION_MAX_FIX_ITERATIONS` | `5` | Max Claude agent iterations for code patch |
 
 ## Project Structure
 
 ```
 sre_agent/
-├── main.py              # FastAPI app + dashboard route
-├── config.py            # All settings (env vars)
-├── models/              # Pydantic models
-│   ├── alert.py
-│   ├── hypothesis.py
-│   ├── report.py
-│   └── tool_result.py
+├── main.py                  # FastAPI app entry point
+├── config.py                # All settings (env vars)
+├── models/
+│   ├── alert.py             # AlertPayload, ErrorEntry
+│   ├── hypothesis.py        # FailureCategory, ConfidenceLevel
+│   ├── report.py            # RCAReport, PossibleFix, CodeChange
+│   ├── tool_result.py       # ToolResult
+│   └── remediation.py       # RemediationResult, RemediationStatus
 ├── api/
-│   ├── webhook.py       # POST /webhook/alert
-│   └── dashboard.py     # Dashboard REST API
+│   ├── webhook.py           # POST /webhook/alert (with dedup)
+│   ├── dedup.py             # Alert deduplication (fingerprint + registry)
+│   ├── dashboard.py         # Dashboard REST API
+│   └── remediation.py       # POST/GET /remediation/{report_id}
 ├── classifier/
-│   ├── patterns.py      # Pattern rules for 8 categories
-│   ├── engine.py        # Pattern-based classifier
-│   └── llm_classifier.py # LLM-enhanced classifier
+│   ├── patterns.py          # Pattern rules for 8 categories
+│   ├── engine.py            # Pattern-based classifier
+│   └── llm_classifier.py    # LLM fallback classifier
 ├── orchestrator/
-│   └── agent.py         # Pipeline coordinator
+│   └── agent.py             # Pipeline coordinator + auto-remediation trigger
 ├── tools/
-│   ├── loki.py          # Log retrieval
-│   ├── git_blame.py     # Commit analysis
-│   └── jira.py          # Ticket fetcher
+│   ├── loki.py              # Log retrieval
+│   ├── git_blame.py         # Commit analysis
+│   └── jira.py              # Ticket fetcher
 ├── reasoning/
-│   ├── engine.py        # Tool selection logic
-│   ├── synthesis.py     # Rule-based evidence synthesis
-│   └── llm_synthesis.py # LLM-powered synthesis
+│   ├── engine.py            # Tool selection logic
+│   ├── synthesis.py         # Rule-based evidence synthesis
+│   └── llm_synthesis.py     # LLM-powered synthesis
+├── remediation/
+│   ├── agent.py             # RemediationAgent — 8-step fix pipeline
+│   ├── capability.py        # Claude availability check (LLM_ENABLED + API key + DNS)
+│   ├── branch_manager.py    # git branch create/push
+│   ├── fix_applier.py       # Apply revert, Claude patch, or manual instructions
+│   ├── code_fix_agent.py    # Multi-turn Claude agentic loop with tool use
+│   └── test_runner.py       # Runtime detection + test execution
 ├── report/
-│   ├── generator.py     # JSON + MD report writer + DB save
-│   └── fixes.py         # Prioritised fix suggestions
+│   ├── generator.py         # JSON + MD report writer + DB save
+│   └── fixes.py             # Prioritised fix suggestions
 ├── llm/
-│   ├── client.py        # LLM client (Anthropic/OpenAI/Custom)
-│   └── prompts.py       # LLM prompt templates
+│   ├── client.py            # LLM client (Anthropic/OpenAI/Custom/Mock)
+│   └── prompts.py           # LLM prompt templates
 ├── database/
-│   ├── models.py        # SQLAlchemy ORM models
-│   └── service.py       # DB read/write service
+│   ├── models.py            # SQLAlchemy ORM models
+│   └── service.py           # DB read/write service
 ├── reports/
-│   └── dashboard.html   # Dashboard web UI
-└── tests/               # 58 tests
+│   └── dashboard.html       # Dashboard web UI (single-file)
+└── tests/                   # 91 tests
+    ├── test_classifier.py
+    ├── test_tools.py
+    ├── test_orchestrator.py
+    ├── test_webhook.py
+    ├── test_dedup.py         # 16 dedup tests
+    └── test_remediation.py  # 17 remediation tests
 ```
 
 ## Testing
 
 ```bash
 # Run all tests
-pytest tests/ -v
+venv/bin/python -m pytest tests/ -v
 
 # With coverage
-pytest tests/ --cov=. --cov-report=html
+venv/bin/python -m pytest tests/ --cov=. --cov-report=html
 ```
 
-**Test coverage: 58 tests across classifier, tools, orchestrator, and webhook.**
+**91 tests** across classifier, tools, orchestrator, webhook, dedup, and remediation.
 
 ## Security Notes
 
 - Never commit `.env` (contains API tokens)
 - Use Jira API tokens, not passwords
 - Restrict `/webhook/alert` access via API gateway or firewall
-- Logs may contain sensitive error messages — sanitize as needed
+- The Claude fix agent uses an allowlist for tool execution — only the configured test command can be run (no arbitrary shell)
+- Path traversal is prevented in the code fix agent's file read/write tools
 
 ## Troubleshooting
 
@@ -306,11 +414,14 @@ pytest tests/ --cov=. --cov-report=html
 |-------|-----|
 | Loki unreachable | Check `LOKI_URL`, verify network access |
 | Jira auth failed | Verify `JIRA_USERNAME` and `JIRA_API_TOKEN` |
-| Git repo not found | Clone service repos into `GIT_REPOS_ROOT` |
-| SSL errors | Set `ssl=False` is already applied to all HTTP calls |
+| Git repo not found | Clone service repos into `GIT_REPOS_ROOT/{app_name}` |
+| Fix branch not created | Ensure repo exists at `GIT_REPOS_ROOT/{app_name}` |
+| Tests not detected | Check repo has `requirements.txt`, `pom.xml`, or `package.json` |
+| Claude not patching | Set `LLM_ENABLED=true` and `LLM_API_KEY` in `.env` |
+| SSL errors | `ssl=False` is already applied to all HTTP calls |
 | Dashboard empty | Run `python seed_reports.py` to populate with sample data |
-| Reports not in DB | Check server logs for `saved to database` confirmation |
+| Duplicate alert not suppressed | Check `DEDUP_WINDOW_MINUTES` and `/webhook/health` for dedup stats |
 
 ---
 
-**Built with Claude Code**
+**Built by Priyanshu Parate**
