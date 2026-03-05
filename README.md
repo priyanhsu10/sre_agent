@@ -268,16 +268,18 @@ The agent detects how to run tests from the repo contents:
 When `fix_type=claude_agent_patch`, Claude runs a multi-turn conversation with tools:
 
 ```
-Iteration 1:  Claude → calls read_file("src/order_validator.py")
-              You    → return file contents
-Iteration 2:  Claude → calls write_file("src/order_validator.py", fixed_code)
-              You    → write file, return "OK"
-Iteration 3:  Claude → calls run_tests()
-              You    → run pytest, return output
-Iteration 4:  If tests pass → Claude stops
-              If tests fail → Claude reads failure, refines fix, repeats
+Iteration 1:  Agent → calls read_file("src/order_validator.py")
+              You   → return file contents
+Iteration 2:  Agent → calls write_file("src/order_validator.py", fixed_code)
+              You   → write file, return "OK"
+Iteration 3:  Agent → calls run_tests()
+              You   → run pytest, return output
+Iteration 4:  If tests pass → Agent stops
+              If tests fail → Agent reads failure, refines fix, repeats
 Max 5 iterations.
 ```
+
+Works with **any model that supports function/tool calling** — not just Claude.
 
 ## LLM Configuration
 
@@ -286,7 +288,7 @@ Supports Anthropic, OpenAI, or any internal self-hosted model (vLLM, Ollama, TGI
 ```bash
 # .env
 
-# Anthropic (Claude) — used for both classification and code fix agent
+# Anthropic (Claude)
 LLM_ENABLED=true
 LLM_PROVIDER=anthropic
 LLM_API_KEY=sk-ant-...
@@ -297,14 +299,55 @@ LLM_PROVIDER=openai
 LLM_API_KEY=sk-...
 LLM_MODEL=gpt-4o
 
-# Custom / Internal (OpenAI-compatible endpoint)
+# Custom / Company model (any OpenAI-compatible endpoint)
 LLM_PROVIDER=custom
-LLM_BASE_URL=http://internal-llm.company.com/v1
+LLM_BASE_URL=http://your-company-llm.internal/v1
 LLM_API_KEY=your-bearer-token
 LLM_MODEL=your-model-name
 ```
 
 Works without LLM (`LLM_ENABLED=false`) — falls back to pattern-only classification and manual fix instructions.
+
+## Supported Models for Code Fix Agent
+
+The agentic fix loop requires a model with **function/tool calling** support.
+
+### Cloud
+
+| Provider | Model | Notes |
+|----------|-------|-------|
+| Anthropic | `claude-sonnet-4-6` | Best overall quality |
+| Anthropic | `claude-opus-4-6` | Highest reasoning |
+| Anthropic | `claude-haiku-4-5-20251001` | Fastest / cheapest |
+| OpenAI | `gpt-4o` | Strong code quality |
+| OpenAI | `gpt-4o-mini` | Fast + cheap |
+| Google | `gemini-1.5-pro` | Via OpenAI-compat proxy |
+| Groq | `llama-3.1-70b-versatile` | Very fast inference |
+
+### Self-Hosted / On-Prem (via Ollama, vLLM, TGI)
+
+| Model | Tool Calling | Best For |
+|-------|-------------|---------|
+| `Qwen2.5-Coder-32B` | ✅ | Best open-source for code fixes |
+| `Llama 3.1 70B` | ✅ | General purpose |
+| `Llama 3.2 11B` | ✅ | Lighter weight |
+| `Mistral 7B Instruct v0.3+` | ✅ | Small footprint |
+| `Mixtral 8x7B Instruct` | ✅ | Good quality/speed balance |
+| `DeepSeek-V3` | ✅ | Strong at reasoning |
+| `Phi-3.5-mini-instruct` | ✅ | Ultra lightweight |
+| `Llama 2` | ❌ | No tool calling |
+| `CodeLlama` | ❌ | No tool calling |
+| `Gemma 2` | ❌ | No tool calling |
+
+**Recommendation for on-prem**: `Qwen2.5-Coder-32B` via vLLM — near GPT-4 quality on coding benchmarks, fully air-gapped.
+
+```bash
+# Example: Qwen via vLLM
+LLM_PROVIDER=custom
+LLM_BASE_URL=http://your-vllm-server:8000/v1
+LLM_API_KEY=token
+LLM_MODEL=Qwen/Qwen2.5-Coder-32B-Instruct
+```
 
 ## Configuration Reference
 
@@ -321,7 +364,8 @@ Works without LLM (`LLM_ENABLED=false`) — falls back to pattern-only classific
 | `LLM_ENABLED` | `false` | Enable LLM-enhanced analysis |
 | `LLM_PROVIDER` | `anthropic` | `anthropic`, `openai`, or `custom` |
 | `LLM_API_KEY` | — | API key / bearer token |
-| `LLM_MODEL` | `claude-sonnet-4-6` | Model name |
+| `LLM_MODEL` | `claude-sonnet-4-6` | Model name (must support tool calling) |
+| `LLM_BASE_URL` | — | Base URL for custom/internal model (e.g. `http://vllm-host:8000/v1`) |
 | `LLM_CONFIDENCE_THRESHOLD` | `40.0` | Use LLM only if pattern confidence < this |
 | `AUTO_REMEDIATION_ENABLED` | `true` | Auto-trigger fix after RCA |
 | `AUTO_REMEDIATION_MIN_CONFIDENCE` | `High` | Min confidence to auto-remediate |
