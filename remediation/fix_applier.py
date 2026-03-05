@@ -107,6 +107,8 @@ async def apply_agent_patch(
     model: str,
     test_timeout_seconds: int,
     max_iterations: int,
+    provider: str = "anthropic",
+    base_url: Optional[str] = None,
 ) -> Tuple[bool, str, int]:
     """
     Apply a code fix using the multi-turn Claude agent.
@@ -131,6 +133,8 @@ async def apply_agent_patch(
         test_command=test_command,
         test_timeout_seconds=test_timeout_seconds,
         max_iterations=max_iterations,
+        provider=provider,
+        base_url=base_url,
     )
 
     success, description, iterations = await agent.run(

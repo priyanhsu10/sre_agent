@@ -1,5 +1,8 @@
 """
-Code Fix Agent - Multi-turn agentic loop using Anthropic API with tool use.
+Code Fix Agent - Multi-turn agentic loop using LLM API with tool use.
+
+Supports Anthropic (Claude) and any OpenAI-compatible endpoint (custom/company models).
+Set LLM_PROVIDER=custom and LLM_BASE_URL=http://your-model/v1 to use your own model.
 
 Instead of a one-shot LLM prompt, this runs a proper agentic loop:
   1. Agent reads files, understands the error
@@ -9,10 +12,10 @@ Instead of a one-shot LLM prompt, this runs a proper agentic loop:
   5. Stops on success or max_iterations
 
 Tools exposed to the agent (sandboxed to repo_path):
-  - read_file(path)         → file contents
+  - read_file(path)           → file contents
   - write_file(path, content) → write/overwrite a file
-  - list_directory(path)    → directory listing
-  - run_tests()             → runs the detected test command (no arbitrary shell)
+  - list_directory(path)      → directory listing
+  - run_tests()               → runs the detected test command (no arbitrary shell)
 """
 
 import json
@@ -25,18 +28,15 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-# Tool definitions for the Anthropic API
-AGENT_TOOLS = [
+# Tool definitions — Anthropic format (input_schema)
+_TOOLS_ANTHROPIC = [
     {
         "name": "read_file",
         "description": "Read the contents of a file in the repository.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Relative path to the file from the repo root"
-                }
+                "path": {"type": "string", "description": "Relative path to the file from the repo root"}
             },
             "required": ["path"]
         }
@@ -47,14 +47,8 @@ AGENT_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Relative path to the file from the repo root"
-                },
-                "content": {
-                    "type": "string",
-                    "description": "Full content to write to the file"
-                }
+                "path": {"type": "string", "description": "Relative path to the file from the repo root"},
+                "content": {"type": "string", "description": "Full content to write to the file"}
             },
             "required": ["path", "content"]
         }
@@ -65,24 +59,69 @@ AGENT_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Relative path from repo root (use '.' for root)"
-                }
+                "path": {"type": "string", "description": "Relative path from repo root (use '.' for root)"}
             },
             "required": ["path"]
         }
     },
     {
         "name": "run_tests",
-        "description": (
-            "Run the project test suite. "
-            "Returns test output. Call this after writing your fix to verify it works."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
+        "description": "Run the project test suite. Returns test output. Call this after writing your fix.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    }
+]
+
+# Tool definitions — OpenAI / custom format (function.parameters)
+_TOOLS_OPENAI = [
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Read the contents of a file in the repository.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path to the file from the repo root"}
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": "Write or overwrite a file in the repository with new content.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path to the file from the repo root"},
+                    "content": {"type": "string", "description": "Full content to write to the file"}
+                },
+                "required": ["path", "content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_directory",
+            "description": "List files and directories at a path in the repository.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path from repo root (use '.' for root)"}
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_tests",
+            "description": "Run the project test suite. Returns test output. Call this after writing your fix.",
+            "parameters": {"type": "object", "properties": {}, "required": []}
         }
     }
 ]
@@ -90,8 +129,9 @@ AGENT_TOOLS = [
 
 class CodeFixAgent:
     """
-    Multi-turn agentic code fixer using Claude with tool use.
+    Multi-turn agentic code fixer with tool use.
 
+    Supports Anthropic (Claude) and OpenAI-compatible endpoints (custom/company models).
     Reads the codebase, applies fixes, runs tests, and iterates until
     tests pass or max_iterations is reached.
     """
@@ -104,6 +144,8 @@ class CodeFixAgent:
         test_command: str,
         test_timeout_seconds: int = 300,
         max_iterations: int = 5,
+        provider: str = "anthropic",       # "anthropic" | "openai" | "custom"
+        base_url: Optional[str] = None,    # Required for "custom" provider
     ):
         self.api_key = api_key
         self.model = model
@@ -111,6 +153,16 @@ class CodeFixAgent:
         self.test_command = test_command
         self.test_timeout_seconds = test_timeout_seconds
         self.max_iterations = max_iterations
+        self.provider = provider.lower()
+        # Determine API URL
+        if self.provider == "anthropic":
+            self.api_url = "https://api.anthropic.com/v1/messages"
+        elif self.provider == "openai":
+            self.api_url = "https://api.openai.com/v1/chat/completions"
+        else:  # custom / company model
+            if not base_url:
+                raise ValueError("base_url is required for provider='custom'")
+            self.api_url = base_url.rstrip("/") + "/chat/completions"
         self._files_written: list[str] = []
 
     async def run(
@@ -169,46 +221,41 @@ class CodeFixAgent:
             if response is None:
                 return False, "LLM API call failed", iteration
 
-            # Add assistant response to messages
-            messages.append({"role": "assistant", "content": response["content"]})
+            # Normalise response into provider-agnostic shape:
+            #   tool_uses = [{id, name, input}]
+            #   text       = plain text summary (if any)
+            #   stop       = True when agent is done
+            tool_uses, text, stop = self._parse_response(response)
 
-            # Check if done (no tool use)
-            tool_uses = [b for b in response["content"] if b.get("type") == "tool_use"]
+            # Append assistant turn to history
+            messages.append({"role": "assistant", "content": response["raw_content"]})
+
             if not tool_uses:
-                # Extract text summary
-                text_blocks = [b["text"] for b in response["content"] if b.get("type") == "text"]
-                fix_description = " ".join(text_blocks)[:500] if text_blocks else "Fix applied"
-                # If agent stopped without running tests and wrote files, assume it thinks it's done
+                fix_description = text[:500] if text else "Fix applied"
                 tests_passed = len(self._files_written) > 0
                 return tests_passed, fix_description, iteration
 
-            # Execute tool calls
-            tool_results = []
+            # Execute all tool calls
             tests_passed_this_round = False
+            tool_result_messages = []
 
             for tool_use in tool_uses:
-                tool_name = tool_use["name"]
-                tool_input = tool_use.get("input", {})
-                tool_use_id = tool_use["id"]
-
                 result_content, tests_passed_this_round = await self._execute_tool(
-                    tool_name, tool_input, tests_passed_this_round
+                    tool_use["name"], tool_use["input"], tests_passed_this_round
+                )
+                tool_result_messages.append(
+                    self._format_tool_result(tool_use["id"], tool_use["name"], result_content)
                 )
 
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_use_id,
-                    "content": result_content
-                })
+            # Append tool results — format differs by provider
+            if self.provider == "anthropic":
+                messages.append({"role": "user", "content": tool_result_messages})
+            else:
+                # OpenAI: each tool result is a separate message with role="tool"
+                messages.extend(tool_result_messages)
 
-            # Add tool results to messages
-            messages.append({"role": "user", "content": tool_results})
-
-            # Check stop reason
-            if response.get("stop_reason") == "end_turn":
-                # Agent finished naturally
-                text_blocks = [b["text"] for b in response["content"] if b.get("type") == "text"]
-                fix_description = " ".join(text_blocks)[:500] if text_blocks else "Fix applied"
+            if stop:
+                fix_description = text[:500] if text else "Fix applied"
                 return tests_passed_this_round, fix_description, iteration
 
         # Exhausted iterations
@@ -321,9 +368,56 @@ class CodeFixAgent:
         except Exception:
             return None
 
+    def _parse_response(self, response: dict) -> Tuple[list, str, bool]:
+        """
+        Normalise provider-specific response into (tool_uses, text, stop).
+
+        tool_uses: list of {id, name, input}
+        text:      plain-text content from the assistant (if any)
+        stop:      True when the agent signals it's done (no more tool calls needed)
+        """
+        if self.provider == "anthropic":
+            content = response.get("raw_content", [])
+            tool_uses = [
+                {"id": b["id"], "name": b["name"], "input": b.get("input", {})}
+                for b in content if b.get("type") == "tool_use"
+            ]
+            text = " ".join(b["text"] for b in content if b.get("type") == "text")
+            stop = response.get("stop_reason") == "end_turn"
+            return tool_uses, text, stop
+        else:
+            # OpenAI / custom
+            message = response.get("raw_content", {})
+            tool_calls = message.get("tool_calls") or []
+            tool_uses = [
+                {
+                    "id": tc["id"],
+                    "name": tc["function"]["name"],
+                    "input": json.loads(tc["function"].get("arguments", "{}")),
+                }
+                for tc in tool_calls
+            ]
+            text = message.get("content") or ""
+            stop = response.get("finish_reason") in ("stop", "length") and not tool_calls
+            return tool_uses, text, stop
+
+    def _format_tool_result(self, tool_id: str, tool_name: str, content: str) -> dict:
+        """Format a tool result message for the correct provider."""
+        if self.provider == "anthropic":
+            return {"type": "tool_result", "tool_use_id": tool_id, "content": content}
+        else:
+            # OpenAI / custom: tool result is a standalone message
+            return {"role": "tool", "tool_call_id": tool_id, "name": tool_name, "content": content}
+
     async def _call_api(self, messages: list, system_prompt: str) -> Optional[dict]:
-        """Call the Anthropic API with tool use enabled."""
-        url = "https://api.anthropic.com/v1/messages"
+        """Call the configured LLM API with tool use enabled."""
+        if self.provider == "anthropic":
+            return await self._call_anthropic(messages, system_prompt)
+        else:
+            return await self._call_openai_compatible(messages, system_prompt)
+
+    async def _call_anthropic(self, messages: list, system_prompt: str) -> Optional[dict]:
+        """Call Anthropic API."""
         headers = {
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
@@ -334,29 +428,60 @@ class CodeFixAgent:
             "max_tokens": 4096,
             "temperature": 0.0,
             "system": system_prompt,
-            "tools": AGENT_TOOLS,
+            "tools": _TOOLS_ANTHROPIC,
             "messages": messages,
         }
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    url,
-                    headers=headers,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=120),
-                    ssl=False,
+                    self.api_url, headers=headers, json=payload,
+                    timeout=aiohttp.ClientTimeout(total=120), ssl=False,
                 ) as resp:
                     if resp.status != 200:
-                        error_text = await resp.text()
-                        logger.error(f"Anthropic API error {resp.status}: {error_text}")
+                        logger.error(f"Anthropic API error {resp.status}: {await resp.text()}")
                         return None
                     data = await resp.json()
                     return {
-                        "content": data.get("content", []),
+                        "raw_content": data.get("content", []),
                         "stop_reason": data.get("stop_reason"),
                     }
         except Exception as e:
-            logger.error(f"API call failed: {e}", exc_info=True)
+            logger.error(f"Anthropic API call failed: {e}", exc_info=True)
+            return None
+
+    async def _call_openai_compatible(self, messages: list, system_prompt: str) -> Optional[dict]:
+        """Call OpenAI or any OpenAI-compatible endpoint (custom/company model)."""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        # Prepend system message
+        full_messages = [{"role": "system", "content": system_prompt}] + messages
+        payload = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "temperature": 0.0,
+            "tools": _TOOLS_OPENAI,
+            "tool_choice": "auto",
+            "messages": full_messages,
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.api_url, headers=headers, json=payload,
+                    timeout=aiohttp.ClientTimeout(total=120), ssl=False,
+                ) as resp:
+                    if resp.status != 200:
+                        logger.error(f"Custom LLM API error {resp.status}: {await resp.text()}")
+                        return None
+                    data = await resp.json()
+                    message = data["choices"][0]["message"]
+                    return {
+                        "raw_content": message,
+                        "finish_reason": data["choices"][0].get("finish_reason"),
+                    }
+        except Exception as e:
+            logger.error(f"Custom LLM API call failed: {e}", exc_info=True)
             return None
 
     def stage_and_commit(self) -> None:

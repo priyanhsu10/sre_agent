@@ -146,6 +146,8 @@ class RemediationAgent:
                     model=settings.LLM_MODEL,
                     test_timeout_seconds=settings.REMEDIATION_TEST_TIMEOUT_SECONDS,
                     max_iterations=settings.REMEDIATION_MAX_FIX_ITERATIONS,
+                    provider=settings.LLM_PROVIDER,
+                    base_url=settings.LLM_BASE_URL or None,
                 )
 
             else:  # manual_instructions — Claude is not available
