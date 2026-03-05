@@ -8,14 +8,12 @@ Author: Jordan (DEV-1)
 
 import logging
 from datetime import datetime
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, status
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
 
 from models.alert import AlertPayload
-from models.report import RCAReport
-
 from orchestrator.agent import AgentOrchestrator
+from api.dedup import make_fingerprint, get_deduplicator
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +75,42 @@ async def receive_alert(
         JSON response with investigation_id and status
     """
 
-    # Generate investigation ID for tracking
-    investigation_id = f"rca-{alert.app_name}-{int(datetime.utcnow().timestamp())}"
-
     logger.info(
         f"Received alert for {alert.app_name} (severity={alert.severity.value}, "
         f"environment={alert.environment.value}, errors={len(alert.errors)})"
     )
+
+    # ── Deduplication check ──────────────────────────────────────────────────
+    dedup = get_deduplicator()
+    fingerprint = make_fingerprint(alert)
+    existing = dedup.check(fingerprint)
+
+    if existing is not None:
+        # Duplicate — return the existing investigation ID, no new work spawned
+        logger.warning(
+            f"Duplicate alert for {alert.app_name}/{alert.environment.value} suppressed. "
+            f"Existing investigation: {existing.investigation_id} (status={existing.status})"
+        )
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "status": "duplicate",
+                "investigation_id": existing.investigation_id,
+                "message": (
+                    f"Duplicate alert detected for {alert.app_name}. "
+                    f"Investigation {existing.investigation_id} is already {existing.status}. "
+                    f"No new investigation started."
+                ),
+                "app_name": alert.app_name,
+                "environment": alert.environment.value,
+                "existing_status": existing.status,
+                "existing_started_at": existing.registered_at.isoformat(),
+            }
+        )
+    # ── New alert — proceed ──────────────────────────────────────────────────
+
+    # Generate investigation ID for tracking
+    investigation_id = f"rca-{alert.app_name}-{int(datetime.utcnow().timestamp())}"
 
     # Check for null correlation IDs (log warning but don't fail)
     null_corr_count = sum(1 for e in alert.errors if e.correlation_id is None)
@@ -93,10 +120,14 @@ async def receive_alert(
             f"Will use fallback log retrieval methods."
         )
 
+    # Register before scheduling so any concurrent duplicate is caught immediately
+    dedup.register(fingerprint, investigation_id, alert)
+
     # Schedule background investigation
     background_tasks.add_task(
         run_investigation,
         investigation_id=investigation_id,
+        fingerprint=fingerprint,
         alert=alert
     )
 
@@ -119,11 +150,16 @@ async def receive_alert(
 # BACKGROUND INVESTIGATION TASK
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-async def run_investigation(investigation_id: str, alert: AlertPayload) -> None:
+async def run_investigation(
+    investigation_id: str,
+    fingerprint: str,
+    alert: AlertPayload,
+) -> None:
     """
     Background task that runs the full RCA investigation pipeline.
 
-    This is the entry point to the entire agent orchestration system.
+    Updates the dedup registry on completion or failure so subsequent
+    duplicate checks reflect the correct state.
 
     **Pipeline:**
     1. Classification (think-first: MUST run before tools)
@@ -133,6 +169,7 @@ async def run_investigation(investigation_id: str, alert: AlertPayload) -> None:
 
     Args:
         investigation_id: Unique ID for this investigation
+        fingerprint: Alert content fingerprint for dedup registry update
         alert: The alert payload to investigate
 
     Returns:
@@ -142,6 +179,7 @@ async def run_investigation(investigation_id: str, alert: AlertPayload) -> None:
         Never raises - catches all exceptions and generates partial reports
     """
     logger.info(f"[{investigation_id}] Starting investigation for {alert.app_name}")
+    dedup = get_deduplicator()
 
     try:
         # Initialize orchestrator and run full investigation
@@ -157,16 +195,19 @@ async def run_investigation(investigation_id: str, alert: AlertPayload) -> None:
         # Report is saved to DB by ReportGenerator.generate() inside orchestrator.investigate()
         logger.info(f"[{investigation_id}] Report {report.report_id} saved to database")
 
+        # Mark as completed — future duplicates within window will be suppressed
+        dedup.mark_completed(fingerprint)
+
     except Exception as e:
         logger.error(
             f"[{investigation_id}] Investigation failed with unexpected error: {e}",
             exc_info=True
         )
-        # Even on failure, we should generate a partial report
-        # This ensures we never silently fail
         logger.warning(
             f"[{investigation_id}] Generating partial report due to investigation failure"
         )
+        # Mark as failed — next alert for the same issue will be allowed through
+        dedup.mark_failed(fingerprint)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -188,5 +229,6 @@ async def health_check() -> dict:
     return {
         "status": "healthy",
         "service": "sre-agent-webhook",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "dedup": get_deduplicator().stats(),
     }

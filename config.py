@@ -59,6 +59,18 @@ class Settings(BaseSettings):
     # Custom / internal provider
     LLM_BASE_URL: str = Field(default="", description="Base URL for custom/internal LLM (e.g. http://internal-llm.company.com/v1)")
 
+    # Alert deduplication
+    DEDUP_WINDOW_MINUTES: int = Field(default=30, description="Suppress duplicate alerts within this window (minutes)")
+    DEDUP_ALLOW_RETRY_ON_FAILURE: bool = Field(default=True, description="Allow re-investigation when previous attempt failed")
+
+    # Remediation
+    AUTO_REMEDIATION_ENABLED: bool = Field(default=True, description="Auto-trigger fix workflow after RCA")
+    AUTO_REMEDIATION_MIN_CONFIDENCE: str = Field(default="High", description="Min confidence level to auto-remediate: 'High' or 'Confirmed'")
+    REMEDIATION_BRANCH_PREFIX: str = Field(default="fix/rca", description="Git branch prefix for fix branches")
+    REMEDIATION_REMOTE: str = Field(default="origin", description="Git remote to push fix branches to")
+    REMEDIATION_TEST_TIMEOUT_SECONDS: int = Field(default=300, description="Max seconds to wait for tests")
+    REMEDIATION_MAX_FIX_ITERATIONS: int = Field(default=5, description="Max Claude agent iterations for code patch")
+
     class Config:
         env_file = ".env"
         case_sensitive = True

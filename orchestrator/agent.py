@@ -6,13 +6,14 @@ Enforces think-first protocol, coordinates tool execution, and produces reports.
 Author: Jordan (DEV-1)
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 from models.alert import AlertPayload
-from models.hypothesis import ClassificationResult, FailureCategory
-from models.report import RCAReport, InvestigationStep, PossibleFix, ConfidenceLevel
+from models.hypothesis import ClassificationResult, FailureCategory, ConfidenceLevel
+from models.report import RCAReport, InvestigationStep, PossibleFix
 from models.tool_result import ToolResult, ToolName
 from classifier.engine import ClassificationEngine
 from config import settings
@@ -307,6 +308,10 @@ class AgentOrchestrator:
                 f"Reports written to {json_path} and {md_path}"
             )
 
+            # Auto-remediation: trigger in background if conditions are met
+            if settings.AUTO_REMEDIATION_ENABLED and self._should_remediate(report):
+                asyncio.create_task(self._run_remediation(report))
+
             return report
 
         except Exception as e:
@@ -427,6 +432,53 @@ class AgentOrchestrator:
             )
 
         return f"{result.tool_name.value} completed successfully"
+
+    def _should_remediate(self, report: RCAReport) -> bool:
+        """
+        Determine if automated remediation should be triggered.
+
+        Conditions:
+          - is_code_change=True AND confidence >= AUTO_REMEDIATION_MIN_CONFIDENCE → revert
+          - code_logic_error AND LLM_ENABLED → claude_agent_patch
+        """
+        min_conf = settings.AUTO_REMEDIATION_MIN_CONFIDENCE  # "High" or "Confirmed"
+        confidence_order = {
+            ConfidenceLevel.LOW.value: 0,
+            ConfidenceLevel.MEDIUM.value: 1,
+            ConfidenceLevel.HIGH.value: 2,
+            ConfidenceLevel.CONFIRMED.value: 3,
+        }
+        min_threshold = confidence_order.get(min_conf, 2)
+        current = confidence_order.get(report.confidence_level.value, 0)
+
+        if report.is_code_change and current >= min_threshold:
+            return True
+
+        if (
+            report.root_cause_category == FailureCategory.CODE_LOGIC_ERROR
+            and settings.LLM_ENABLED
+            and current >= min_threshold
+        ):
+            return True
+
+        return False
+
+    async def _run_remediation(self, report: RCAReport) -> None:
+        """Background task: run remediation agent and log result."""
+        try:
+            from remediation.agent import RemediationAgent
+            agent = RemediationAgent()
+            result = await agent.run(report)
+            logger.info(
+                f"[{self.investigation_id}] Remediation complete: "
+                f"status={result.status.value}, branch={result.branch_name}, "
+                f"tests_passed={result.tests_passed}, pushed={result.branch_pushed}"
+            )
+        except Exception as e:
+            logger.error(
+                f"[{self.investigation_id}] Remediation failed unexpectedly: {e}",
+                exc_info=True
+            )
 
     def _generate_placeholder_report(self, alert: AlertPayload) -> RCAReport:
         """

@@ -624,6 +624,48 @@
         .action-item .rationale { font-size: 0.85em; color: #94a3b8; }
         .action-item .impact { font-size: 0.82em; color: #64748b; margin-top: 4px; }
 
+        /* Apply Fix button & status panel */
+        .apply-fix-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #6d28d9, #4f46e5);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 16px;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .apply-fix-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .apply-fix-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .fix-status-panel {
+            margin-top: 14px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 16px 20px;
+            font-size: 0.88em;
+        }
+        .fix-status-panel .fs-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .fix-status-panel .fs-label { color: #94a3b8; }
+        .fix-status-panel .fs-val { color: #e2e8f0; font-family: monospace; }
+        .fix-status-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 700;
+        }
+        .fix-status-badge.pending    { background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+        .fix-status-badge.running    { background: rgba(129,140,248,0.2); color: #818cf8; border: 1px solid rgba(129,140,248,0.3); }
+        .fix-status-badge.pushed     { background: rgba(34,197,94,0.2);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+        .fix-status-badge.failed     { background: rgba(239,68,68,0.2);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+        .fix-status-badge.manual     { background: rgba(251,191,36,0.2); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+
         /* Root cause summary box */
         .rc-box {
             background: #2d1b69;
@@ -1432,6 +1474,8 @@ function renderModal(r) {
     const pClass = p => p === 1 ? 'p1' : p === 2 ? 'p2' : p === 3 ? 'p3' : 'p4';
     const pLabel = p => p === 1 ? 'PRIORITY 1 — IMMEDIATE' : p === 2 ? `PRIORITY 2 — TODAY` : p === 3 ? 'PRIORITY 3 — THIS WEEK' : `PRIORITY ${p}`;
 
+    const isFixable = r.is_code_change === true || r.root_cause_category === 'code_logic_error';
+
     const fixesHtml = fixes.length > 0 ? `
     <div class="ms">
         <div class="ms-title"><span class="ms-num">${commits.length > 0 ? 4 : 3}</span> Developer Action Plan</div>
@@ -1443,6 +1487,12 @@ function renderModal(r) {
                 <p class="impact"><strong>Impact:</strong> ${f.estimated_impact}</p>
             </div>
         `).join('')}
+        ${isFixable ? `
+        <button class="apply-fix-btn" id="applyFixBtn" onclick="applyFix('${r.id}')">
+            🔧 Apply Automated Fix
+        </button>
+        <div id="fixStatusPanel" style="display:none" class="fix-status-panel"></div>
+        ` : ''}
     </div>` : '';
 
     // ── SECTION 5: Ruled Out ──────────────────────────────────────────────────
@@ -1496,6 +1546,104 @@ function renderModal(r) {
         <a href="/static/${r.id}.json" target="_blank">{ } Raw JSON</a>
         <a href="/static/${r.id}.md" target="_blank">📄 Markdown Report</a>
         <a href="#" onclick="copyShareLink('${r.id}'); return false;" id="shareLinkBtn">🔗 Copy Share Link</a>
+    `;
+}
+
+// ── Apply Automated Fix ────────────────────────────────────────────────────
+
+let _fixPollTimer = null;
+
+function applyFix(reportId) {
+    const btn = document.getElementById('applyFixBtn');
+    const panel = document.getElementById('fixStatusPanel');
+    if (!btn || !panel) return;
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Triggering fix…';
+    panel.style.display = 'block';
+    panel.innerHTML = '<span style="color:#818cf8">Sending request to remediation API…</span>';
+
+    fetch(`/remediation/${reportId}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            btn.textContent = '⏳ Fix In Progress…';
+            panel.innerHTML = '<span style="color:#818cf8">Starting fix workflow…</span>';
+            // Always poll GET endpoint for live status
+            startFixPolling(reportId);
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = '🔧 Apply Automated Fix';
+            panel.innerHTML = `<span style="color:#f87171">Error: ${err.message}</span>`;
+        });
+}
+
+function startFixPolling(reportId) {
+    if (_fixPollTimer) clearInterval(_fixPollTimer);
+    _fixPollTimer = setInterval(() => pollFixStatus(reportId), 3000);
+}
+
+function pollFixStatus(reportId) {
+    fetch(`/remediation/${reportId}`)
+        .then(r => r.json())
+        .then(data => {
+            const panel = document.getElementById('fixStatusPanel');
+            const btn   = document.getElementById('applyFixBtn');
+            if (!panel) { clearInterval(_fixPollTimer); return; }
+
+            panel.innerHTML = renderFixStatus(data);
+
+            const done = ['pushed', 'failed', 'manual_instructions_created'].includes(data.status);
+            if (done) {
+                clearInterval(_fixPollTimer);
+                _fixPollTimer = null;
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = data.status === 'pushed'
+                        ? '✅ Fix Applied & Pushed'
+                        : data.status === 'manual_instructions_created'
+                            ? '📄 Instructions Created'
+                            : '❌ Fix Failed';
+                }
+            }
+        })
+        .catch(() => {});  // silently ignore transient network errors
+}
+
+function renderFixStatus(r) {
+    if (!r || !r.status) return '<span style="color:#64748b">Waiting for status…</span>';
+
+    const statusMap = {
+        pending:   { cls: 'pending', label: 'Pending' },
+        branch_created: { cls: 'running', label: 'Branch Created' },
+        fix_applied:    { cls: 'running', label: 'Fix Applied' },
+        tests_running:  { cls: 'running', label: 'Tests Running…' },
+        tests_passed:   { cls: 'pushed',  label: 'Tests Passed ✓' },
+        tests_failed:   { cls: 'failed',  label: 'Tests Failed' },
+        pushed:         { cls: 'pushed',  label: 'Pushed ✓' },
+        manual_instructions_created: { cls: 'manual', label: 'Instructions Ready' },
+        failed:         { cls: 'failed',  label: 'Failed' },
+    };
+    const s = statusMap[r.status] || { cls: 'pending', label: r.status };
+
+    const row = (label, val) => val
+        ? `<div class="fs-row"><span class="fs-label">${label}</span><span class="fs-val">${val}</span></div>`
+        : '';
+
+    return `
+        <div class="fs-row">
+            <span class="fs-label">Status</span>
+            <span class="fix-status-badge ${s.cls}">${s.label}</span>
+        </div>
+        ${row('Fix Type', r.fix_type)}
+        ${row('Branch', r.branch_name)}
+        ${row('Runtime', r.test_runtime ? `${r.test_runtime} · <code>${r.test_command || ''}</code>` : null)}
+        ${r.tests_passed !== undefined ? row('Tests', r.tests_passed ? '✅ Passed' : '❌ Failed') : ''}
+        ${row('Manual Instructions', r.manual_instructions_file)}
+        ${r.error_message ? `<div style="color:#f87171;margin-top:8px;font-size:0.85em">⚠ ${r.error_message}</div>` : ''}
+        ${r.status === 'pushed' ? `<div style="color:#4ade80;margin-top:8px">🎉 Branch <strong>${r.branch_name}</strong> pushed — open a PR to review the fix.</div>` : ''}
+        ${r.status === 'tests_passed' ? `<div style="color:#4ade80;margin-top:8px">✅ Fix applied & tests pass on branch <strong>${r.branch_name}</strong>. Push it manually or configure a remote.</div>` : ''}
+        ${r.status === 'manual_instructions_created' ? `<div style="color:#fbbf24;margin-top:8px">📄 Fix instructions committed to <strong>${r.branch_name}</strong>. Claude was not available for automated patching.</div>` : ''}
     `;
 }
 

@@ -15,6 +15,7 @@ from fastapi.responses import RedirectResponse
 
 from api.webhook import router as webhook_router
 from api.dashboard import router as dashboard_router
+from api.remediation import router as remediation_router
 from config import settings
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -64,6 +65,7 @@ app.add_middleware(
 
 app.include_router(webhook_router)
 app.include_router(dashboard_router)
+app.include_router(remediation_router)
 
 # Serve static report files (HTML, JSON, MD)
 app.mount("/static", StaticFiles(directory="reports"), name="static")
@@ -84,23 +86,10 @@ async def view_report(report_id: str):
     return RedirectResponse(url=f"/static/dashboard.html?report={report_id}")
 
 
-@app.get("/", tags=["root"])
+@app.get("/", tags=["root"], include_in_schema=False)
 async def root():
-    """Root endpoint with service information"""
-    return {
-        "service": "SRE Agent",
-        "version": "0.1.0",
-        "description": "Smart Root Cause Analyser for production alerts",
-        "endpoints": {
-            "webhook": "/webhook/alert (POST)",
-            "health": "/webhook/health (GET)",
-            "dashboard_ui": "/dashboard-ui (GET)",
-            "dashboard_stats": "/dashboard/stats (GET)",
-            "dashboard_reports": "/dashboard/reports (GET)",
-            "docs": "/docs",
-        },
-        "status": "operational"
-    }
+    """Redirect to the dashboard UI."""
+    return RedirectResponse(url="/dashboard-ui")
 
 
 @app.get("/health", tags=["health"])
