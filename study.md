@@ -466,6 +466,255 @@ LLM_ENABLED=true (full config set)
 
 ---
 
+## 8. `_synthesize_node` — Deep Dive
+
+The **final node** in the LangGraph pipeline. By the time it runs, all tools have collected
+their evidence. Its job: look at everything and produce the final RCA report.
+
+### What the node does (orchestrator/agent.py:320)
+
+```python
+async def _synthesize_node(self, state: AgentState) -> dict:
+
+    # Step 1 — Determine root cause from all evidence
+    root_cause, category, confidence_level, is_code_change = (
+        await self.synthesis_engine.synthesize_root_cause(
+            classification=state["classification_result"],
+            tool_results=state["tool_results"],
+        )
+    )
+
+    # Step 2 — Which categories were ruled out and why
+    ruled_out = self.synthesis_engine.build_ruled_out_categories(...)
+
+    # Step 3 — Extract code changes from git results
+    code_changes = self.synthesis_engine.extract_code_changes(...)
+
+    # Step 4 — Extract raw log evidence
+    log_evidence = self.synthesis_engine.extract_log_evidence(...)
+
+    # Step 5 — Generate fix recommendations
+    possible_fixes = self.fixes_generator.generate_fixes(...)
+
+    # Step 6 — Assemble the final RCAReport
+    report = RCAReport(root_cause=root_cause, ...)
+
+    return {"report": report}   # written into AgentState → graph ends
+```
+
+### Two synthesis engines — which one runs
+
+```
+LLM_ENABLED=false → SynthesisEngine       (rule-based, always works)
+LLM_ENABLED=true  → LLMSynthesisEngine    (LLM first, rule-based fallback)
+```
+
+`LLMSynthesisEngine` inherits from `SynthesisEngine` — gets all methods for free,
+only overrides `synthesize_root_cause`.
+
+---
+
+### Step 1 — `synthesize_root_cause` (reasoning/synthesis.py)
+
+Analyzes all tool results into simple summary dicts:
+
+```python
+loki_evidence = _analyze_loki_evidence()
+# → {has_evidence, stack_trace_count, slow_query_count, error_count}
+
+git_evidence  = _analyze_git_evidence()
+# → {has_commits, commit_count, high_churn_count, jira_key_count}
+
+jira_evidence = _analyze_jira_evidence()
+# → {has_tickets, ticket_count, risk_flagged_count}
+
+is_code_change = git_evidence["has_commits"] and git_evidence["commit_count"] > 0
+```
+
+**Rule-based root cause text** — each piece of evidence adds a sentence:
+
+```python
+parts = [f"Root cause identified as {category.value}."]
+
+if loki_evidence["has_evidence"]:
+    parts.append(f"Log analysis found {error_count} error occurrences.")
+
+if is_code_change:
+    parts.append(f"Git identified {commit_count} recent code change(s)...")
+
+if jira_evidence["risk_flagged_count"] > 0:
+    parts.append(f"Jira flagged {risk_flagged_count} risky ticket(s)...")
+```
+
+**LLM root cause text** — sends real enriched data (actual log lines, commit messages,
+ticket summaries) to LLM for a natural language explanation. Falls back to rule-based
+if LLM call fails.
+
+**Confidence boosting** — classifier gave a base %. Evidence from tools boosts it:
+
+```
+base confidence (from classifier):          65%
++ Loki found stack traces:                 +10%
++ Loki found slow queries:                  +5%
++ Git found commits:                        +5%
++ Git found high-churn files:               +5%
++ Jira flagged risky ticket (hotfix):      +10%
+─────────────────────────────────────────
+final confidence:                          100% (capped)
+```
+
+Converted to a level:
+```
+< 40%  → LOW
+< 70%  → MEDIUM
+< 85%  → HIGH
+≥ 85%  → CONFIRMED
+```
+
+---
+
+### Step 2 — `build_ruled_out_categories`
+
+Shows reasoning — why the other 7 categories were dismissed.
+Appears in the RCA report so humans can see the full reasoning, not just the answer.
+
+```python
+# For hypotheses 2 and 3 from classification
+for hypothesis in classification.top_hypotheses[1:]:
+    ruled_out.append(RuledOutCategory(
+        category=category,
+        reason="No strong evidence found for dns_failure",
+        evidence="Logs did not contain patterns matching dns_failure"
+    ))
+
+# Also rule out all categories not in top 3
+for category in all_8_categories:
+    if category not in top_3:
+        ruled_out.append(...)
+```
+
+---
+
+### Step 3 — `extract_code_changes`
+
+Pulls structured commit data from Git results with risk flag detection:
+
+```python
+for commit in commits[:10]:
+    risk_flags = []
+    if "hotfix"    in commit["message"].lower(): risk_flags.append("hotfix")
+    if "emergency" in commit["message"].lower(): risk_flags.append("emergency")
+
+    # Also pull risk labels from Jira for this ticket
+    jira_ticket = extract_jira_key(commit["message"])   # e.g. "PAY-1234"
+    if jira_ticket in jira_data:
+        risk_flags.extend(jira_data[jira_ticket]["risk_flags"])
+
+    code_changes.append(CodeChange(
+        commit_hash=..., author=..., message=...,
+        files_changed=[...], jira_ticket=jira_ticket, risk_flags=risk_flags
+    ))
+```
+
+The most recent commit (`code_changes[0]`) becomes the revert candidate in fixes.
+
+---
+
+### Step 4 — `extract_log_evidence`
+
+Packages raw Loki data into the report:
+
+```python
+return LogEvidence(
+    correlation_id=corr_id,
+    stack_traces=data["stack_traces"],
+    key_log_lines=data["key_log_lines"][:20],   # limited to 20 lines
+    slow_queries=data["slow_queries"],
+    total_error_count=data["total_error_count"]
+)
+```
+
+This is what you see in the "Log Evidence" section of the dashboard.
+
+---
+
+### Step 5 — `generate_fixes` (report/fixes.py)
+
+Produces a prioritised action list. Has hardcoded templates for all 8 categories.
+Special rule: **if a code change was found, revert is always Priority 1**.
+
+```python
+if is_code_change and code_changes:
+    fixes.append(PossibleFix(
+        priority=1,
+        action=f"Revert commit {code_changes[0].commit_hash} by {code_changes[0].author}",
+        ...
+    ))
+
+# All template fixes shift down by 1 if revert was added
+for template in FIX_TEMPLATES[root_cause_category]:
+    priority = template["priority"] + (1 if is_code_change else 0)
+    fixes.append(PossibleFix(priority=priority, ...))
+
+# Always last: monitoring improvement
+fixes.append(PossibleFix(priority=len(fixes)+1, action="Enhance monitoring..."))
+
+fixes.sort(key=lambda f: f.priority)
+```
+
+Example output for `db_connectivity` with a code change:
+```
+Priority 1: Revert commit abc123 by john.doe          ← dynamic
+Priority 2: Check database server health and restart  ← template (was 1, shifted)
+Priority 3: Increase connection pool size             ← template (was 2, shifted)
+Priority 4: Review and optimize slow queries
+Priority 5: Implement connection pooling health checks
+Priority 6: Enhance monitoring and alerting           ← always last
+```
+
+---
+
+### Full synthesize_node flow
+
+```
+state["tool_results"]  +  state["classification_result"]
+            │
+            ▼
+   synthesize_root_cause()
+            │
+            ├── _analyze_loki_evidence()   counts: stack traces, errors, slow queries
+            ├── _analyze_git_evidence()    counts: commits, high-churn files
+            ├── _analyze_jira_evidence()   counts: tickets, risk flags
+            │
+            ├── LLM available?
+            │       YES → LLM call with real log lines + commits + ticket summaries
+            │       NO / fails → rule-based template sentences (silent fallback)
+            │
+            └── _calculate_final_confidence()
+                    base% + boosts from each tool → capped at 100%
+                    → LOW / MEDIUM / HIGH / CONFIRMED
+            │
+            ▼
+   build_ruled_out_categories()   why the other 7 categories don't apply
+            │
+            ▼
+   extract_code_changes()         commits + risk flags (hotfix, emergency, jira labels)
+            │
+            ▼
+   extract_log_evidence()         stack traces, log lines, slow queries
+            │
+            ▼
+   generate_fixes()
+            ├── code change? → Priority 1 = Revert commit {hash}
+            ├── category templates → Priority 2, 3, 4... (shifted if revert added)
+            └── always → "Enhance monitoring" as final fix
+            │
+            ▼
+        RCAReport assembled → written to AgentState → graph hits END
+```
+
+---
+
 ## 6. Key Files Quick Reference
 
 | File | What it does |
