@@ -15,7 +15,7 @@ An autonomous pipeline that receives production alerts, classifies failures, inv
 - **Graceful Fallback**: When Claude unavailable, creates `FIX_INSTRUCTIONS.md` on branch with full manual steps
 - **Live Dashboard**: Web UI with charts, filters, RCA modals, and one-click "Apply Fix" button
 - **DB Persistence**: All reports saved to SQLite, queryable via REST API
-- **Custom LLM Provider**: Supports Anthropic, OpenAI, or any internal self-hosted model
+- **Custom LLM Provider**: Any OpenAI-compatible endpoint (vLLM, Ollama, TGI, LM Studio, etc.) — SSL verification disabled for corporate networks
 
 ## Architecture
 
@@ -283,27 +283,15 @@ Works with **any model that supports function/tool calling** — not just Claude
 
 ## LLM Configuration
 
-Supports Anthropic, OpenAI, or any internal self-hosted model (vLLM, Ollama, TGI, etc.).
+Only OpenAI-compatible endpoints are supported (custom/internal self-hosted models). SSL verification is disabled by default to work in corporate networks with self-signed certificates.
 
 ```bash
 # .env
 
-# Anthropic (Claude)
 LLM_ENABLED=true
-LLM_PROVIDER=anthropic
-LLM_API_KEY=sk-ant-...
-LLM_MODEL=claude-sonnet-4-6
-
-# OpenAI
-LLM_PROVIDER=openai
-LLM_API_KEY=sk-...
-LLM_MODEL=gpt-4o
-
-# Custom / Company model (any OpenAI-compatible endpoint)
-LLM_PROVIDER=custom
-LLM_BASE_URL=http://your-company-llm.internal/v1
-LLM_API_KEY=your-bearer-token
-LLM_MODEL=your-model-name
+LLM_BASE_URL=http://your-company-llm.internal/v1   # Required: OpenAI-compatible endpoint
+LLM_API_KEY=your-bearer-token                       # Bearer token for the endpoint
+LLM_MODEL=your-model-name                           # e.g. gpt-4o, Qwen2.5-Coder-32B-Instruct
 ```
 
 Works without LLM (`LLM_ENABLED=false`) — falls back to pattern-only classification and manual fix instructions.
@@ -343,7 +331,7 @@ The agentic fix loop requires a model with **function/tool calling** support.
 
 ```bash
 # Example: Qwen via vLLM
-LLM_PROVIDER=custom
+LLM_ENABLED=true
 LLM_BASE_URL=http://your-vllm-server:8000/v1
 LLM_API_KEY=token
 LLM_MODEL=Qwen/Qwen2.5-Coder-32B-Instruct
@@ -362,10 +350,9 @@ LLM_MODEL=Qwen/Qwen2.5-Coder-32B-Instruct
 | `CONFIDENCE_THRESHOLD` | `85.0` | Stop investigation when confidence exceeds this |
 | `DEDUP_WINDOW_MINUTES` | `30` | Suppress duplicate alerts within this window |
 | `LLM_ENABLED` | `false` | Enable LLM-enhanced analysis |
-| `LLM_PROVIDER` | `anthropic` | `anthropic`, `openai`, or `custom` |
-| `LLM_API_KEY` | — | API key / bearer token |
-| `LLM_MODEL` | `claude-sonnet-4-6` | Model name (must support tool calling) |
-| `LLM_BASE_URL` | — | Base URL for custom/internal model (e.g. `http://vllm-host:8000/v1`) |
+| `LLM_API_KEY` | — | Bearer token for the custom endpoint |
+| `LLM_MODEL` | `gpt-4o` | Model name served by the endpoint (must support tool calling) |
+| `LLM_BASE_URL` | — | Required when `LLM_ENABLED=true` — OpenAI-compatible endpoint (e.g. `http://vllm-host:8000/v1`) |
 | `LLM_CONFIDENCE_THRESHOLD` | `40.0` | Use LLM only if pattern confidence < this |
 | `AUTO_REMEDIATION_ENABLED` | `true` | Auto-trigger fix after RCA |
 | `AUTO_REMEDIATION_MIN_CONFIDENCE` | `High` | Min confidence to auto-remediate |
@@ -416,7 +403,7 @@ sre_agent/
 │   ├── generator.py         # JSON + MD report writer + DB save
 │   └── fixes.py             # Prioritised fix suggestions
 ├── llm/
-│   ├── client.py            # LLM client (Anthropic/OpenAI/Custom/Mock)
+│   ├── client.py            # LLM client (custom OpenAI-compatible endpoint, SSL verify=False)
 │   └── prompts.py           # LLM prompt templates
 ├── database/
 │   ├── models.py            # SQLAlchemy ORM models
@@ -461,7 +448,7 @@ venv/bin/python -m pytest tests/ --cov=. --cov-report=html
 | Git repo not found | Clone service repos into `GIT_REPOS_ROOT/{app_name}` |
 | Fix branch not created | Ensure repo exists at `GIT_REPOS_ROOT/{app_name}` |
 | Tests not detected | Check repo has `requirements.txt`, `pom.xml`, or `package.json` |
-| Claude not patching | Set `LLM_ENABLED=true` and `LLM_API_KEY` in `.env` |
+| Agent not patching | Set `LLM_ENABLED=true`, `LLM_BASE_URL`, and `LLM_API_KEY` in `.env` |
 | SSL errors | `ssl=False` is already applied to all HTTP calls |
 | Dashboard empty | Run `python seed_reports.py` to populate with sample data |
 | Duplicate alert not suppressed | Check `DEDUP_WINDOW_MINUTES` and `/webhook/health` for dedup stats |

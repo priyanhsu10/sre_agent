@@ -23,8 +23,10 @@ structlog==24.1.0
 # Type checking (dev)
 mypy==1.8.0
 
-# LLM Integration (optional)
-anthropic==0.18.1  # Claude API
+# LLM Integration — custom OpenAI-compatible endpoint
+langchain-openai>=0.1.8
+langgraph>=0.1.0
+langchain-core>=0.2.0
 
 # Database (Dashboard Enhancement)
 sqlalchemy>=2.0.36

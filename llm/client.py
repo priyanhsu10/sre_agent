@@ -1,46 +1,34 @@
 """
-LLM Client - Abstracts LLM API calls for intelligent analysis.
+LLM Client - Custom OpenAI-compatible provider via langchain-openai.
 
-Supports multiple providers with a unified interface.
-
-Author: Alex (ARCHITECT) - LLM Enhancement
+Only supports OpenAI-compatible endpoints (custom/internal self-hosted models).
+Set LLM_BASE_URL to your endpoint, e.g. http://internal-llm.company.com/v1
 """
 
-import json
 import logging
-from typing import Optional, Dict, Any, List
-from enum import Enum
+from typing import Optional
 
-import aiohttp
+import httpx
 from pydantic import BaseModel
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
 
 
-class LLMProvider(str, Enum):
-    """Supported LLM providers"""
-    ANTHROPIC = "anthropic"
-    OPENAI = "openai"
-    MOCK = "mock"       # For testing without API
-    CUSTOM = "custom"   # Internal / self-hosted model (OpenAI-compatible endpoint)
-
-
 class LLMConfig(BaseModel):
-    """LLM configuration"""
-    provider: LLMProvider = LLMProvider.ANTHROPIC
+    """LLM configuration for a custom OpenAI-compatible endpoint."""
     api_key: str
-    model: str = "claude-3-5-sonnet-20241022"  # Latest Claude
+    model: str = "gpt-4o"
     max_tokens: int = 2048
-    temperature: float = 0.0  # Deterministic for production
+    temperature: float = 0.0
     timeout: int = 30
-    # Custom / internal provider fields
-    base_url: Optional[str] = None  # e.g. http://internal-llm.company.com/v1
+    base_url: str = ""  # e.g. http://internal-llm.company.com/v1
 
 
 class LLMResponse(BaseModel):
-    """Standardized LLM response"""
+    """Standardized LLM response."""
     content: str
-    provider: str
     model: str
     tokens_used: Optional[int] = None
     finish_reason: Optional[str] = None
@@ -48,287 +36,81 @@ class LLMResponse(BaseModel):
 
 class LLMClient:
     """
-    Unified LLM client supporting multiple providers.
+    LLM client for custom OpenAI-compatible endpoints.
 
-    **Usage:**
-    ```python
-    client = LLMClient(config)
-    response = await client.complete(prompt, system_prompt)
-    ```
+    Uses langchain-openai under the hood.  The endpoint must expose
+    /chat/completions in the OpenAI API format (vLLM, LM Studio, Ollama, etc.).
+
+    Usage:
+        config = LLMConfig(api_key="...", base_url="http://my-llm/v1", model="my-model")
+        client = LLMClient(config)
+        response = await client.complete(prompt, system_prompt)
     """
 
     def __init__(self, config: LLMConfig):
+        if not config.base_url:
+            raise ValueError(
+                "LLM_BASE_URL must be set. "
+                "Example: http://internal-llm.company.com/v1"
+            )
         self.config = config
-        self.provider = config.provider
+        # Disable SSL verification for corporate networks with self-signed certs
+        self._llm = ChatOpenAI(
+            api_key=config.api_key,
+            model=config.model,
+            max_tokens=config.max_tokens,
+            temperature=config.temperature,
+            request_timeout=config.timeout,
+            base_url=config.base_url,
+            http_client=httpx.AsyncClient(verify=False),
+        )
 
     async def complete(
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        response_format: Optional[str] = None  # "json" for structured output
+        response_format: Optional[str] = None,
     ) -> LLMResponse:
         """
-        Complete a prompt using the configured LLM.
+        Complete a prompt using the custom LLM endpoint.
 
         Args:
             prompt: User prompt
             system_prompt: System instructions (optional)
-            response_format: "json" for JSON mode (optional)
+            response_format: "json" to request JSON output
 
         Returns:
             LLMResponse with content and metadata
         """
-        if self.provider == LLMProvider.ANTHROPIC:
-            return await self._anthropic_complete(prompt, system_prompt, response_format)
-        elif self.provider == LLMProvider.OPENAI:
-            return await self._openai_complete(prompt, system_prompt, response_format)
-        elif self.provider == LLMProvider.CUSTOM:
-            return await self._custom_complete(prompt, system_prompt, response_format)
-        elif self.provider == LLMProvider.MOCK:
-            return await self._mock_complete(prompt, system_prompt)
-        else:
-            raise ValueError(f"Unsupported provider: {self.provider}")
-
-    async def _anthropic_complete(
-        self,
-        prompt: str,
-        system_prompt: Optional[str],
-        response_format: Optional[str]
-    ) -> LLMResponse:
-        """Call Anthropic API (Claude)"""
-        url = "https://api.anthropic.com/v1/messages"
-
-        headers = {
-            "x-api-key": self.config.api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
-        }
-
-        # Build messages
-        messages = [{"role": "user", "content": prompt}]
-
-        # Add JSON instruction if requested
-        if response_format == "json":
-            messages[0]["content"] = (
-                f"{prompt}\n\n"
-                "Respond with valid JSON only, no markdown formatting."
-            )
-
-        payload = {
-            "model": self.config.model,
-            "max_tokens": self.config.max_tokens,
-            "temperature": self.config.temperature,
-            "messages": messages
-        }
-
-        if system_prompt:
-            payload["system"] = system_prompt
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    url,
-                    headers=headers,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=self.config.timeout),
-                    ssl=False
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise Exception(f"Anthropic API error {response.status}: {error_text}")
-
-                    data = await response.json()
-
-                    content = data["content"][0]["text"]
-                    usage = data.get("usage", {})
-
-                    return LLMResponse(
-                        content=content,
-                        provider="anthropic",
-                        model=self.config.model,
-                        tokens_used=usage.get("output_tokens"),
-                        finish_reason=data.get("stop_reason")
-                    )
-
-        except aiohttp.ClientError as e:
-            logger.error(f"Anthropic API connection error: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Anthropic API error: {e}", exc_info=True)
-            raise
-
-    async def _openai_complete(
-        self,
-        prompt: str,
-        system_prompt: Optional[str],
-        response_format: Optional[str]
-    ) -> LLMResponse:
-        """Call OpenAI API (GPT)"""
-        url = "https://api.openai.com/v1/chat/completions"
-
-        headers = {
-            "Authorization": f"Bearer {self.config.api_key}",
-            "Content-Type": "application/json"
-        }
-
         messages = []
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+            messages.append(SystemMessage(content=system_prompt))
 
-        payload = {
-            "model": self.config.model,
-            "messages": messages,
-            "max_tokens": self.config.max_tokens,
-            "temperature": self.config.temperature
-        }
-
-        # JSON mode for GPT-4
+        user_content = prompt
         if response_format == "json":
-            payload["response_format"] = {"type": "json_object"}
+            user_content += "\n\nRespond with valid JSON only, no markdown formatting."
+        messages.append(HumanMessage(content=user_content))
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    url,
-                    headers=headers,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=self.config.timeout),
-                    ssl=False
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise Exception(f"OpenAI API error {response.status}: {error_text}")
-
-                    data = await response.json()
-
-                    content = data["choices"][0]["message"]["content"]
-                    usage = data.get("usage", {})
-
-                    return LLMResponse(
-                        content=content,
-                        provider="openai",
-                        model=self.config.model,
-                        tokens_used=usage.get("completion_tokens"),
-                        finish_reason=data["choices"][0].get("finish_reason")
-                    )
-
-        except aiohttp.ClientError as e:
-            logger.error(f"OpenAI API connection error: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"OpenAI API error: {e}", exc_info=True)
-            raise
-
-    async def _custom_complete(
-        self,
-        prompt: str,
-        system_prompt: Optional[str],
-        response_format: Optional[str]
-    ) -> LLMResponse:
-        """
-        Call a custom / internal self-hosted model via an OpenAI-compatible
-        chat completions endpoint.
-
-        Requires LLMConfig.base_url to be set, e.g.:
-            http://internal-llm.company.com/v1
-
-        The endpoint called is: {base_url}/chat/completions
-        Authentication: Bearer token (LLMConfig.api_key).
-        """
-        if not self.config.base_url:
-            raise ValueError(
-                "LLM_BASE_URL must be set when using provider 'custom'. "
-                "Example: http://internal-llm.company.com/v1"
-            )
-
-        url = self.config.base_url.rstrip("/") + "/chat/completions"
-
-        headers = {
-            "Authorization": f"Bearer {self.config.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        messages: List[Dict[str, Any]] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        payload: Dict[str, Any] = {
-            "model": self.config.model,
-            "messages": messages,
-            "max_tokens": self.config.max_tokens,
-            "temperature": self.config.temperature,
-        }
-
-        # Request JSON output if needed (same as OpenAI)
+        # Attempt to bind JSON mode (supported by many OpenAI-compatible servers)
+        llm = self._llm
         if response_format == "json":
-            payload["response_format"] = {"type": "json_object"}
+            try:
+                llm = self._llm.bind(response_format={"type": "json_object"})
+            except Exception:
+                pass  # Fall back to prompt-based JSON instruction
 
-        logger.debug(f"Custom LLM request → {url}  model={self.config.model}")
+        logger.debug(f"LLM request → {self.config.base_url}  model={self.config.model}")
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    url,
-                    headers=headers,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=self.config.timeout),
-                    ssl=False
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise Exception(
-                            f"Custom LLM API error {response.status}: {error_text}"
-                        )
+        response = await llm.ainvoke(messages)
 
-                    data = await response.json()
-
-                    # OpenAI-compatible response shape
-                    content = data["choices"][0]["message"]["content"]
-                    usage = data.get("usage", {})
-
-                    return LLMResponse(
-                        content=content,
-                        provider="custom",
-                        model=self.config.model,
-                        tokens_used=usage.get("completion_tokens"),
-                        finish_reason=data["choices"][0].get("finish_reason")
-                    )
-
-        except aiohttp.ClientError as e:
-            logger.error(f"Custom LLM connection error ({url}): {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Custom LLM error: {e}", exc_info=True)
-            raise
-
-    async def _mock_complete(
-        self,
-        prompt: str,
-        system_prompt: Optional[str]
-    ) -> LLMResponse:
-        """Mock LLM for testing"""
-        # Simple mock responses based on keywords
-        if "classify" in prompt.lower():
-            content = json.dumps({
-                "category": "db_connectivity",
-                "confidence": 85.0,
-                "reasoning": "Mock: Database connection patterns detected"
-            })
-        elif "root cause" in prompt.lower():
-            content = "Mock: Database connection pool exhaustion due to configuration issue"
-        elif "fix" in prompt.lower():
-            content = json.dumps([
-                {"priority": 1, "action": "Mock: Increase connection pool size"}
-            ])
-        else:
-            content = "Mock LLM response"
+        # Extract token usage if the server returns it
+        tokens_used = None
+        usage = getattr(response, "usage_metadata", None)
+        if isinstance(usage, dict):
+            tokens_used = usage.get("output_tokens")
 
         return LLMResponse(
-            content=content,
-            provider="mock",
-            model="mock-model",
-            tokens_used=100,
-            finish_reason="stop"
+            content=response.content,
+            model=self.config.model,
+            tokens_used=tokens_used,
         )
