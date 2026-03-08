@@ -62,6 +62,10 @@ class GitBlameChecker(BaseTool):
             ToolResult with commit and blame data
         """
         start_time = time.perf_counter()
+        logger.info(
+            f"GitBlame: starting analysis for app={alert.app_name} "
+            f"(lookback={self.lookback_days}d)"
+        )
 
         try:
             # Construct repo path
@@ -112,6 +116,12 @@ class GitBlameChecker(BaseTool):
             high_churn_files = self._detect_high_churn_files(commits)
 
             duration_ms = (time.perf_counter() - start_time) * 1000.0
+            logger.info(
+                f"GitBlame: found {len(commits)} commits, "
+                f"{len(jira_keys)} jira keys, "
+                f"{len(high_churn_files)} high-churn files "
+                f"({duration_ms:.0f}ms)"
+            )
 
             return ToolResult(
                 tool_name=ToolName.GIT_BLAME,

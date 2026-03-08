@@ -7,12 +7,13 @@ Author: Jordan (DEV-1)
 """
 
 import logging
-import sys
-from fastapi import FastAPI
+import time
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
+from logging_config import setup_logging
 from api.webhook import router as webhook_router
 from api.dashboard import router as dashboard_router
 from api.remediation import router as remediation_router
@@ -22,13 +23,7 @@ from config import settings
 # LOGGING CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+setup_logging(settings.LOG_LEVEL)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +53,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log every HTTP request with method, path, status, and duration."""
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        f"HTTP {request.method} {request.url.path} "
+        f"→ {response.status_code} ({duration_ms:.1f}ms)"
+    )
+    return response
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ROUTERS

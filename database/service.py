@@ -161,8 +161,10 @@ class ReportDatabaseService:
                 .first()
             )
             if not investigation:
+                logger.debug(f"Report '{report_id}' not found in database")
                 return None
 
+            logger.debug(f"Report '{report_id}' fetched from database")
             # Eagerly fetch log evidence
             log_ev = session.query(LogEvidence).filter_by(investigation_id=report_id).first()
             return self._investigation_to_full_dict(investigation, log_ev)

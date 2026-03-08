@@ -95,6 +95,10 @@ class JiraTicketGetter(BaseTool):
             ]
 
             duration_ms = (time.perf_counter() - start_time) * 1000.0
+            logger.info(
+                f"Jira: retrieved {len(tickets)} ticket(s), "
+                f"{len(risk_flagged_tickets)} risk-flagged ({duration_ms:.0f}ms)"
+            )
 
             return ToolResult(
                 tool_name=ToolName.JIRA,
